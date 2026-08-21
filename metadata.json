@@ -1,0 +1,8 @@
+{
+  "name": "VIJAYA AGENCIES",
+  "description": "Invoice and payment management app for distribution business with Google Sheets integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
