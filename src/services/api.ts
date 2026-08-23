@@ -89,6 +89,19 @@ export const api = {
     }
   },
 
+  async bulkDeleteInvoices(billNos: string[]): Promise<ApiResponse<{ deletedCount: number; data: Invoice[] }>> {
+    try {
+      const res = await fetch('/api/invoices/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
+        body: JSON.stringify({ billNos }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to delete invoices' };
+    }
+  },
+
   async getRoots(): Promise<string[]> {
     try {
       const res = await fetch(`/api/roots?_t=${Date.now()}`, {

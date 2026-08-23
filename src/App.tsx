@@ -236,6 +236,36 @@ export default function App() {
     }
   };
 
+  // Handler: Bulk Delete Paid Invoices
+  const handleBulkDeleteInvoices = async (billNos: string[]) => {
+    try {
+      const res = await api.bulkDeleteInvoices(billNos);
+      if (res.success) {
+        const deletedSet = new Set(billNos);
+        setInvoices((prev) => prev.filter((i) => !deletedSet.has(i.billNo)));
+        if (selectedInvoice && deletedSet.has(selectedInvoice.billNo)) {
+          setSelectedInvoice(null);
+        }
+        return {
+          success: true,
+          count: res.data?.deletedCount ?? billNos.length,
+          message: res.message,
+        };
+      }
+      return {
+        success: false,
+        count: 0,
+        message: res.message || 'Failed to delete selected paid invoices.',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        count: 0,
+        message: err.message || 'Network error occurred during bulk delete.',
+      };
+    }
+  };
+
   // Handler: Add Root
   const handleAddNewRoot = async (rootName: string) => {
     const res = await api.addRoot(rootName);
@@ -361,6 +391,7 @@ export default function App() {
                   onSelectInvoice={(inv) => setSelectedInvoice(inv)}
                   onQuickPayment={handleQuickPayment}
                   onNavigateToAddInvoice={() => setActiveScreen('add_invoice')}
+                  onBulkDeletePaid={handleBulkDeleteInvoices}
                   onOpenDownloadModal={(r) => {
                     setDownloadModalRoot(r || 'All');
                     setIsDownloadModalOpen(true);

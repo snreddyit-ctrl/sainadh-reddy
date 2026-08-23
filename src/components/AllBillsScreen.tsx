@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Search, PlusCircle, CreditCard, ChevronRight, MapPin, Calendar, Receipt, Download } from 'lucide-react';
+import { Search, PlusCircle, CreditCard, ChevronRight, MapPin, Calendar, Receipt, Download, Trash2 } from 'lucide-react';
 import { Invoice, InvoiceStatus } from '../types';
 import { formatCurrency, formatDate } from '../utils/format';
 import { downloadRootPendingBillsCsv } from '../utils/exportBills';
+import { BulkDeletePaidModal } from './BulkDeletePaidModal';
 
 interface AllBillsScreenProps {
   invoices: Invoice[];
@@ -11,6 +12,7 @@ interface AllBillsScreenProps {
   onQuickPayment: (billNo: string) => void;
   onNavigateToAddInvoice: () => void;
   onOpenDownloadModal?: (root?: string) => void;
+  onBulkDeletePaid?: (billNos: string[]) => Promise<{ success: boolean; count: number; message?: string }>;
 }
 
 export const AllBillsScreen: React.FC<AllBillsScreenProps> = ({
@@ -20,11 +22,13 @@ export const AllBillsScreen: React.FC<AllBillsScreenProps> = ({
   onQuickPayment,
   onNavigateToAddInvoice,
   onOpenDownloadModal,
+  onBulkDeletePaid,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | InvoiceStatus>('All');
   const [rootFilter, setRootFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'pending_desc'>('date_desc');
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
 
   // Filter & Search
   const filtered = invoices.filter((inv) => {
@@ -68,6 +72,18 @@ export const AllBillsScreen: React.FC<AllBillsScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {statusFilter === 'Paid' && (
+            <button
+              type="button"
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold rounded-xl text-xs uppercase tracking-wider shadow-2xs transition-all active:scale-95 animate-fadeIn"
+              title="Bulk delete settled paid invoices with date range"
+            >
+              <Trash2 className="w-4 h-4 text-red-600" />
+              <span>Delete Paid Bills</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => {
@@ -161,6 +177,26 @@ export const AllBillsScreen: React.FC<AllBillsScreenProps> = ({
             </select>
           </div>
         </div>
+
+        {/* Paid Status Action Callout */}
+        {statusFilter === 'Paid' && (
+          <div className="bg-gradient-to-r from-red-50 to-orange-50/60 border border-red-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-fadeIn">
+            <div className="flex items-center gap-2 text-xs text-red-900 font-medium">
+              <Trash2 className="w-4 h-4 text-red-600 shrink-0" />
+              <span>
+                Viewing <strong>{filtered.length}</strong> fully settled Paid bills. Need to delete older records?
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-all active:scale-95 whitespace-nowrap self-start sm:self-auto"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Paid (Date Range)</span>
+            </button>
+          </div>
+        )}
 
         {/* Summary tally */}
         <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100 font-medium">
@@ -349,6 +385,18 @@ export const AllBillsScreen: React.FC<AllBillsScreenProps> = ({
           ))
         )}
       </div>
+
+      {/* Bulk Delete Paid Modal */}
+      <BulkDeletePaidModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        invoices={invoices}
+        roots={roots}
+        onConfirmBulkDelete={
+          onBulkDeletePaid ||
+          (async () => ({ success: false, count: 0, message: 'Delete handler not configured.' }))
+        }
+      />
     </div>
   );
 };

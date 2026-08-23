@@ -475,6 +475,50 @@ async function startServer() {
     }
   });
 
+  // POST Bulk Delete Invoices
+  app.post('/api/invoices/bulk-delete', async (req, res) => {
+    try {
+      const { billNos } = req.body;
+      if (!Array.isArray(billNos) || billNos.length === 0) {
+        return res.status(400).json({ success: false, message: 'No bill numbers provided for bulk deletion.' });
+      }
+
+      const billNoSet = new Set(billNos.map((b) => String(b).trim()));
+      const initialCount = appData.invoices.length;
+      
+      const deletedInvoices: Invoice[] = [];
+      appData.invoices = appData.invoices.filter((inv) => {
+        if (billNoSet.has(inv.billNo)) {
+          deletedInvoices.push(inv);
+          return false;
+        }
+        return true;
+      });
+
+      const deletedCount = initialCount - appData.invoices.length;
+      saveData(appData);
+
+      if (appData.sheetsConfig.appsScriptUrl && deletedInvoices.length > 0) {
+        for (const inv of deletedInvoices) {
+          forwardToGoogleSheets({
+            action: 'deleteInvoice',
+            billNo: inv.billNo,
+          }).catch((e) => console.error(`Background sheets delete failed for bill ${inv.billNo}:`, e));
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: `Successfully deleted ${deletedCount} invoice${deletedCount === 1 ? '' : 's'}.`,
+        deletedCount,
+        data: deletedInvoices,
+      });
+    } catch (err: any) {
+      console.error('Bulk delete error:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Failed to bulk delete invoices.' });
+    }
+  });
+
   // GET Roots
   app.get('/api/roots', (req, res) => {
     res.json({ success: true, data: appData.roots });
