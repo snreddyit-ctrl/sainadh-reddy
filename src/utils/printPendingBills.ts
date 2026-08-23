@@ -133,30 +133,6 @@ export function printRootPendingBills(rootName: string, invoices: Invoice[]) {
       font-size: 11px;
       color: #475569;
     }
-    .summary-cards {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
-      margin-bottom: 14px;
-    }
-    .summary-card {
-      border: 1px solid #cbd5e1;
-      padding: 6px 10px;
-      border-radius: 6px;
-      background: #f8fafc;
-    }
-    .summary-card-title {
-      font-size: 10px;
-      text-transform: uppercase;
-      color: #64748b;
-      font-weight: 700;
-    }
-    .summary-card-val {
-      font-size: 14px;
-      font-weight: 800;
-      margin-top: 2px;
-      color: #0f172a;
-    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -252,25 +228,6 @@ export function printRootPendingBills(rootName: string, invoices: Invoice[]) {
     <div class="meta-info">
       <div><strong>Date:</strong> ${printDateStr} ${printTimeStr}</div>
       <div><strong>Total Bills:</strong> ${pendingInvoices.length}</div>
-    </div>
-  </div>
-
-  <div class="summary-cards">
-    <div class="summary-card">
-      <div class="summary-card-title">Route</div>
-      <div class="summary-card-val" style="color: #1e40af;">${escapeHtml(isAll ? 'All Routes' : rootName)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-card-title">Total Bill Amount</div>
-      <div class="summary-card-val">${formatCurrency(totalBilled)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-card-title">Total Amount Paid</div>
-      <div class="summary-card-val" style="color: #047857;">${formatCurrency(totalPaid)}</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-card-title">Total Amount Pending</div>
-      <div class="summary-card-val" style="color: #b91c1c;">${formatCurrency(totalPending)}</div>
     </div>
   </div>
 
