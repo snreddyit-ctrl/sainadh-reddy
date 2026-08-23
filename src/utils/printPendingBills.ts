@@ -74,8 +74,8 @@ export function printRootPendingBills(rootName: string, invoices: Invoice[]) {
           ${isAll ? `<td style="font-weight: 600;">${escapeHtml(inv.root)}</td>` : ''}
           <td style="font-weight: 700; text-align: center;">${escapeHtml(inv.billNo)}</td>
           <td style="text-align: center;">${escapeHtml(billDate)}</td>
-          <td style="text-align: right; color: #047857;">${formatCurrency(inv.amountPaid)}</td>
           <td style="text-align: right; font-weight: 700;">${formatCurrency(inv.billAmount)}</td>
+          <td style="text-align: right; color: #047857;">${formatCurrency(inv.amountPaid)}</td>
           <td style="text-align: right; color: #b91c1c; font-weight: 700;">${formatCurrency(inv.amountPending)}</td>
           <td style="width: 140px; min-width: 120px; text-align: right; color: #cbd5e1;">&nbsp;</td>
         </tr>
@@ -92,7 +92,7 @@ export function printRootPendingBills(rootName: string, invoices: Invoice[]) {
   <style>
     @page {
       size: A4 portrait;
-      margin: 12mm 10mm 12mm 10mm;
+      margin: 6mm 8mm 6mm 8mm;
     }
     * {
       box-sizing: border-box;
@@ -100,59 +100,67 @@ export function printRootPendingBills(rootName: string, invoices: Invoice[]) {
     }
     body {
       margin: 0;
-      padding: 10px;
+      padding: 6px;
       color: #0f172a;
       background: #fff;
-      font-size: 12px;
-      line-height: 1.4;
+      font-size: 11px;
+      line-height: 1.25;
     }
     .header-container {
       border-bottom: 2px solid #0f172a;
-      padding-bottom: 8px;
-      margin-bottom: 12px;
+      padding-bottom: 4px;
+      margin-bottom: 8px;
       display: flex;
       justify-content: space-between;
       align-items: flex-end;
     }
     .company-title {
-      font-size: 20px;
+      font-size: 17px;
       font-weight: 800;
       letter-spacing: 0.5px;
       color: #0f172a;
       text-transform: uppercase;
       margin: 0 0 2px 0;
+      line-height: 1.1;
     }
     .report-subtitle {
-      font-size: 13px;
+      font-size: 11.5px;
       font-weight: 700;
       color: #1e40af;
       margin: 0;
     }
     .meta-info {
       text-align: right;
-      font-size: 11px;
+      font-size: 10px;
       color: #475569;
+      line-height: 1.3;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 16px;
-      font-size: 11px;
+      margin-bottom: 6px;
+      font-size: 10.5px;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tfoot {
+      display: table-footer-group;
     }
     th {
       background-color: #f1f5f9;
       color: #0f172a;
       font-weight: 800;
       text-transform: uppercase;
-      font-size: 9.5px;
-      letter-spacing: 0.5px;
-      padding: 7px 6px;
-      border: 1px solid #94a3b8;
+      font-size: 9px;
+      letter-spacing: 0.3px;
+      padding: 5px 4px;
+      border: 1px solid #64748b;
     }
     td {
-      padding: 6px 6px;
-      height: 30px;
-      border: 1px solid #cbd5e1;
+      padding: 3.5px 4px;
+      height: 25px;
+      border: 1px solid #94a3b8;
       vertical-align: middle;
     }
     tr:nth-child(even) {
@@ -163,23 +171,24 @@ export function printRootPendingBills(rootName: string, invoices: Invoice[]) {
       font-weight: 800;
       border-top: 2px solid #0f172a;
       border-bottom: 2px solid #0f172a;
-      font-size: 11.5px;
+      font-size: 11px;
+      padding: 5px 4px;
     }
     .legend-box {
-      font-size: 10px;
+      font-size: 9.5px;
       color: #475569;
-      margin-top: 8px;
+      margin-top: 4px;
       border-top: 1px dashed #cbd5e1;
-      padding-top: 6px;
+      padding-top: 4px;
       display: flex;
       justify-content: space-between;
     }
     .no-print-bar {
       background: #1e293b;
       color: #fff;
-      padding: 10px 16px;
-      border-radius: 8px;
-      margin-bottom: 16px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      margin-bottom: 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -188,10 +197,10 @@ export function printRootPendingBills(rootName: string, invoices: Invoice[]) {
       background: #2563eb;
       color: #fff;
       border: none;
-      padding: 8px 18px;
-      font-size: 13px;
+      padding: 7px 16px;
+      font-size: 12px;
       font-weight: 700;
-      border-radius: 6px;
+      border-radius: 5px;
       cursor: pointer;
     }
     .print-btn:hover {
@@ -203,9 +212,19 @@ export function printRootPendingBills(rootName: string, invoices: Invoice[]) {
       }
       body {
         padding: 0;
+        margin: 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
       tr {
         page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      thead {
+        display: table-header-group;
+      }
+      tfoot {
+        display: table-footer-group;
       }
     }
   </style>
@@ -238,8 +257,8 @@ export function printRootPendingBills(rootName: string, invoices: Invoice[]) {
         ${isAll ? '<th style="text-align: left; width: 110px;">Root</th>' : ''}
         <th style="text-align: center; width: 75px;">Bill No</th>
         <th style="text-align: center; width: 80px;">Bill Date</th>
-        <th style="text-align: right; width: 85px;">Amount Paid</th>
         <th style="text-align: right; width: 90px;">Bill Amount</th>
+        <th style="text-align: right; width: 85px;">Amount Paid</th>
         <th style="text-align: right; width: 95px;">Amount Pending</th>
         <th style="width: 140px; min-width: 120px; text-align: center;">Amount Collected</th>
       </tr>
@@ -250,8 +269,8 @@ export function printRootPendingBills(rootName: string, invoices: Invoice[]) {
     <tfoot>
       <tr class="tfoot-row">
         <td colspan="${isAll ? 4 : 3}" style="text-align: left;">TOTAL (${pendingInvoices.length} BILLS)</td>
-        <td style="text-align: right; color: #047857;">${formatCurrency(totalPaid)}</td>
         <td style="text-align: right;">${formatCurrency(totalBilled)}</td>
+        <td style="text-align: right; color: #047857;">${formatCurrency(totalPaid)}</td>
         <td style="text-align: right; color: #b91c1c;">${formatCurrency(totalPending)}</td>
         <td style="text-align: center; width: 140px;">&nbsp;</td>
       </tr>
