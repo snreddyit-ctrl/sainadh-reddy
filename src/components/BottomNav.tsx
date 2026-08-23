@@ -17,7 +17,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     { id: 'home' as ActiveScreen, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'all_bills' as ActiveScreen, label: 'All Bills', icon: Receipt },
     { id: 'pending_bills' as ActiveScreen, label: 'Pending', icon: Clock, badge: pendingCount },
-    { id: 'add_invoice' as ActiveScreen, label: 'Add Bill', icon: PlusCircle, isPrimary: true },
+    { id: 'add_invoice' as ActiveScreen, label: 'Add Bill', icon: PlusCircle },
     { id: 'add_payment' as ActiveScreen, label: 'Payment', icon: CreditCard },
     { id: 'root_pending' as ActiveScreen, label: 'Roots', icon: Building2 },
   ];
@@ -28,33 +28,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeScreen === item.id;
-
-          if (item.isPrimary) {
-            return (
-              <button
-                key={item.id}
-                onClick={() => onNavigate(item.id)}
-                className="flex flex-col items-center justify-center -mt-4 group"
-              >
-                <div
-                  className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-md transition-all active:scale-95 ${
-                    isActive
-                      ? 'bg-blue-700 text-white shadow-blue-500/20'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                </div>
-                <span
-                  className={`text-[10px] font-bold mt-1 tracking-tight ${
-                    isActive ? 'text-blue-700' : 'text-slate-600'
-                  }`}
-                >
-                  {item.label}
-                </span>
-              </button>
-            );
-          }
 
           return (
             <button
