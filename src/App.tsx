@@ -50,8 +50,9 @@ export default function App() {
   const [downloadModalRoot, setDownloadModalRoot] = useState<string>('All');
   const [isExportCenterOpen, setIsExportCenterOpen] = useState(false);
 
-  // Fetch initial data
-  const fetchData = async () => {
+  // Fetch fresh data from database
+  const fetchData = async (showLoadingSpinner = false) => {
+    if (showLoadingSpinner) setIsLoading(true);
     try {
       const [invData, rootsData, configData] = await Promise.all([
         api.getInvoices(),
@@ -65,12 +66,42 @@ export default function App() {
     } catch (err) {
       console.error('Error fetching app data:', err);
     } finally {
-      setIsLoading(false);
+      if (showLoadingSpinner) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    // Initial fetch with loader
+    fetchData(true);
+
+    // Auto-refresh when user opens tab, focuses window or navigates back
+    const handleFocus = () => {
+      fetchData(false);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchData(false);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('pageshow', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Background interval auto-refresh every 20 seconds
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchData(false);
+      }
+    }, 20000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('pageshow', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(intervalId);
+    };
   }, []);
 
   // Force Google Sheet Sync

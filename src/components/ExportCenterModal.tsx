@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   X,
   Download,
+  Printer,
   FileSpreadsheet,
   FileArchive,
   FileJson,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Invoice } from '../types';
 import { downloadRootPendingBillsCsv } from '../utils/exportBills';
+import { printRootPendingBills } from '../utils/printPendingBills';
 import { downloadAllProjectDataZip } from '../utils/exportZip';
 import { formatCurrency } from '../utils/format';
 
@@ -66,6 +68,10 @@ export const ExportCenterModal: React.FC<ExportCenterModalProps> = ({
     } finally {
       setIsDownloadingSource(false);
     }
+  };
+
+  const handlePrintRootWise = () => {
+    printRootPendingBills(selectedRoot, invoices);
   };
 
   const handleDownloadRootWiseCsv = () => {
@@ -140,32 +146,33 @@ export const ExportCenterModal: React.FC<ExportCenterModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-xs animate-fadeIn">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-scaleUp max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="p-5 bg-gradient-to-r from-blue-700 to-blue-800 text-white flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
-              <Download className="w-5 h-5 text-white" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-xs animate-fadeIn">
+      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-scaleUp max-h-[92vh] flex flex-col">
+        {/* Modal Header */}
+        <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center border border-blue-400/30">
+              <Layers className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-base leading-tight">Download & Export Center</h3>
-              <p className="text-xs text-blue-100 mt-0.5">
-                Download pending bills, Excel/CSV sheets, and full project archives
+              <h3 className="font-bold text-white text-sm">Download & Export Center</h3>
+              <p className="text-[11px] text-slate-400">
+                VIJAYA AGENCIES • Print reports, download spreadsheets & full source code
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
+        {/* Success Alert */}
         {downloadSuccess && (
-          <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2.5 flex items-center gap-2 text-xs font-bold text-emerald-800 animate-fadeIn">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div className="bg-emerald-600 text-white px-4 py-2.5 text-xs font-bold flex items-center gap-2 animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{downloadSuccess}</span>
           </div>
         )}
@@ -210,14 +217,14 @@ export const ExportCenterModal: React.FC<ExportCenterModalProps> = ({
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-blue-600 text-white tracking-wide">
-                    Requested Format
+                    Print & CSV Format
                   </span>
                   <h4 className="font-bold text-slate-900 text-sm">
-                    Root-Wise Pending Bills (.CSV / Excel)
+                    Root-Wise Pending Bills (Print & .CSV)
                   </h4>
                 </div>
                 <p className="text-xs text-slate-600">
-                  Format: <strong>Bill No • Bill Date • Bill Amount • Amount Paid • Amount Pending</strong>
+                  Format: <strong>SL.NO • Bill No • Bill Date • Amount Paid • P/F • Bill Amount</strong>
                 </p>
               </div>
             </div>
@@ -244,33 +251,43 @@ export const ExportCenterModal: React.FC<ExportCenterModalProps> = ({
                 </select>
               </div>
 
-              <button
-                type="button"
-                onClick={handleDownloadRootWiseCsv}
-                disabled={pendingInvoices.length === 0}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <ArrowDownToLine className="w-4 h-4" />
-                <span>Download Pending CSV</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintRootWise}
+                  disabled={pendingInvoices.length === 0}
+                  className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50"
+                  title="Print Report"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Report</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadRootWiseCsv}
+                  disabled={pendingInvoices.length === 0}
+                  className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50"
+                >
+                  <ArrowDownToLine className="w-3.5 h-3.5" />
+                  <span>Download CSV</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Card 2: Complete Project ZIP Package */}
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Card 2: Complete Project Data ZIP Package */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200">
                 <FileArchive className="w-5 h-5" />
               </div>
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <span>Complete Project ZIP Archive</span>
-                  <span className="text-[10px] bg-amber-200 text-amber-900 font-bold px-1.5 py-0.2 rounded">
-                    All-in-One
-                  </span>
+              <div className="space-y-0.5">
+                <h4 className="font-bold text-slate-900 text-sm">
+                  Complete Data Archive (.ZIP)
                 </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Includes all root CSVs, master invoice ledger, JSON database backup, and Apps Script code.
+                <p className="text-xs text-slate-500">
+                  Includes master CSVs, root breakdown folders, JSON backup, and Google Apps Script sync files.
                 </p>
               </div>
             </div>
@@ -279,64 +296,75 @@ export const ExportCenterModal: React.FC<ExportCenterModalProps> = ({
               type="button"
               onClick={handleDownloadZipBundle}
               disabled={isExportingZip}
-              className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
+              className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50"
             >
-              <FileArchive className="w-4 h-4" />
-              <span>{isExportingZip ? 'Packing...' : 'Download ZIP'}</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>{isExportingZip ? 'Packaging...' : 'Download ZIP'}</span>
             </button>
           </div>
 
-          {/* Grid of Other File Formats */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            {/* All Invoices Master CSV */}
-            <div className="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                <div>
-                  <h5 className="font-bold text-xs text-slate-900">All Invoices Master Ledger</h5>
-                  <p className="text-[11px] text-slate-400">{invoices.length} total records (CSV)</p>
-                </div>
+          {/* Card 3: All Invoices Master CSV */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 border border-emerald-200">
+                <FileSpreadsheet className="w-5 h-5" />
               </div>
-              <button
-                type="button"
-                onClick={handleDownloadAllInvoicesCsv}
-                className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors"
-                title="Download All Invoices CSV"
-              >
-                <Download className="w-4 h-4" />
-              </button>
+              <div className="space-y-0.5">
+                <h4 className="font-bold text-slate-900 text-sm">
+                  All Invoices Master Ledger (.CSV)
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Full dataset of {invoices.length} invoices with all statuses (Paid, Part Paid, Pending).
+                </p>
+              </div>
             </div>
 
-            {/* JSON Database Backup */}
-            <div className="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <FileJson className="w-4 h-4 text-indigo-600" />
-                <div>
-                  <h5 className="font-bold text-xs text-slate-900">JSON Database File</h5>
-                  <p className="text-[11px] text-slate-400">Full structured database backup</p>
-                </div>
+            <button
+              type="button"
+              onClick={handleDownloadAllInvoicesCsv}
+              className="px-3.5 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs uppercase tracking-wider shadow-2xs transition-all flex items-center justify-center gap-1.5 shrink-0"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span>Download CSV</span>
+            </button>
+          </div>
+
+          {/* Card 4: JSON Backup */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center shrink-0 border border-indigo-200">
+                <FileJson className="w-5 h-5" />
               </div>
-              <button
-                type="button"
-                onClick={handleDownloadJson}
-                className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors"
-                title="Download JSON Database"
-              >
-                <Download className="w-4 h-4" />
-              </button>
+              <div className="space-y-0.5">
+                <h4 className="font-bold text-slate-900 text-sm">
+                  Full Database Backup (.JSON)
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Raw JSON dump for database migration or secure offline storage.
+                </p>
+              </div>
             </div>
+
+            <button
+              type="button"
+              onClick={handleDownloadJson}
+              className="px-3.5 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs uppercase tracking-wider shadow-2xs transition-all flex items-center justify-center gap-1.5 shrink-0"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span>Download JSON</span>
+            </button>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <div className="text-xs text-slate-500">
-            Current Pending Total: <strong className="text-red-600">{formatCurrency(totalPendingAmount)}</strong>
-          </div>
+        {/* Modal Footer */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+          <span className="text-xs text-slate-500">
+            Total Outstanding: <strong className="text-red-600">{formatCurrency(totalPendingAmount)}</strong>
+          </span>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-colors"
+            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-bold transition-colors"
           >
             Close
           </button>

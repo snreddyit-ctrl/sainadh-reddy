@@ -47,9 +47,7 @@ function setupSheetStructure() {
     mainSheet.setFrozenRows(1);
     
     // Add sample initial invoice
-    mainSheet.appendRow(["1001", "Hyderabad", "2026-08-20", 45000, 10000, 35000, "Part Paid"]);
-    mainSheet.appendRow(["1002", "Vijayawada", "2026-08-20", 50000, 0, 50000, "Pending"]);
-    mainSheet.appendRow(["1003", "Pattapuram", "2026-08-21", 40000, 0, 40000, "Pending"]);
+    // Initial blank sheet ready for user's real data
   }
 
   // 2. Setup Roots Sheet
@@ -62,9 +60,6 @@ function setupSheetStructure() {
     rootsSheet.appendRow(["Root"]);
     rootsSheet.getRange(1, 1, 1, 1).setFontWeight("bold").setBackground("#e2e8f0");
     rootsSheet.setFrozenRows(1);
-    rootsSheet.appendRow(["Pattapuram"]);
-    rootsSheet.appendRow(["Hyderabad"]);
-    rootsSheet.appendRow(["Vijayawada"]);
   }
 
   return "Setup completed successfully!";
@@ -190,23 +185,39 @@ function fetchInvoices() {
 function fetchRoots() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(ROOTS_SHEET_NAME);
-  if (!sheet) {
-    setupSheetStructure();
-    sheet = ss.getSheetByName(ROOTS_SHEET_NAME);
-  }
-  
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return ["Pattapuram", "Hyderabad", "Vijayawada"];
-
-  const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
   const roots = [];
-  for (let i = 0; i < values.length; i++) {
-    const rootName = String(values[i][0]).trim();
-    if (rootName && roots.indexOf(rootName) === -1) {
-      roots.push(rootName);
+
+  if (sheet) {
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < values.length; i++) {
+        const rootName = String(values[i][0]).trim();
+        if (rootName && roots.indexOf(rootName) === -1) {
+          roots.push(rootName);
+        }
+      }
     }
   }
-  return roots.length > 0 ? roots : ["Pattapuram", "Hyderabad", "Vijayawada"];
+
+  // If Roots tab is empty or has no entries, extract all unique roots directly from the Main sheet invoices
+  if (roots.length === 0) {
+    const mainSheet = ss.getSheetByName(MAIN_SHEET_NAME);
+    if (mainSheet) {
+      const mainLastRow = mainSheet.getLastRow();
+      if (mainLastRow > 1) {
+        const mainValues = mainSheet.getRange(2, 2, mainLastRow - 1, 1).getValues();
+        for (let j = 0; j < mainValues.length; j++) {
+          const rootVal = String(mainValues[j][0]).trim();
+          if (rootVal && roots.indexOf(rootVal) === -1) {
+            roots.push(rootVal);
+          }
+        }
+      }
+    }
+  }
+
+  return roots;
 }
 
 function addInvoice(data) {

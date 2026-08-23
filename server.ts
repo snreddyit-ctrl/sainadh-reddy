@@ -41,93 +41,14 @@ const DATA_FILE = path.join(DATA_DIR, 'database.json');
 
 // Default initial data matching distribution business requirements
 const DEFAULT_DATA: AppData = {
-  roots: ['Pattapuram', 'Hyderabad', 'Vijayawada', 'Guntur', 'Visakhapatnam'],
+  roots: [],
   sheetsConfig: {
     appsScriptUrl: '',
     isConnected: false,
     lastSynced: null,
   },
-  invoices: [
-    {
-      billNo: '1001',
-      root: 'Pattapuram',
-      billDate: '2026-08-18',
-      billAmount: 40000,
-      amountPaid: 0,
-      amountPending: 40000,
-      status: 'Pending',
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      billNo: '1002',
-      root: 'Hyderabad',
-      billDate: '2026-08-19',
-      billAmount: 60000,
-      amountPaid: 25000,
-      amountPending: 35000,
-      status: 'Part Paid',
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      billNo: '1003',
-      root: 'Vijayawada',
-      billDate: '2026-08-20',
-      billAmount: 50000,
-      amountPaid: 0,
-      amountPending: 50000,
-      status: 'Pending',
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      billNo: '1004',
-      root: 'Hyderabad',
-      billDate: '2026-08-17',
-      billAmount: 30000,
-      amountPaid: 30000,
-      amountPending: 0,
-      status: 'Paid',
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      billNo: '1005',
-      root: 'Pattapuram',
-      billDate: '2026-08-21',
-      billAmount: 20000,
-      amountPaid: 5000,
-      amountPending: 15000,
-      status: 'Part Paid',
-      updatedAt: new Date().toISOString(),
-    },
-  ],
-  payments: [
-    {
-      id: 'pay-1',
-      billNo: '1002',
-      amount: 25000,
-      date: '2026-08-20',
-      timestamp: Date.now() - 86400000,
-      previousPaid: 0,
-      newPaid: 25000,
-    },
-    {
-      id: 'pay-2',
-      billNo: '1004',
-      amount: 30000,
-      date: '2026-08-19',
-      timestamp: Date.now() - 172800000,
-      previousPaid: 0,
-      newPaid: 30000,
-    },
-    {
-      id: 'pay-3',
-      billNo: '1005',
-      amount: 5000,
-      date: '2026-08-21',
-      timestamp: Date.now() - 3600000,
-      previousPaid: 0,
-      newPaid: 5000,
-    },
-  ],
+  invoices: [],
+  payments: [],
 };
 
 function loadData(): AppData {
@@ -209,20 +130,45 @@ async function syncFromGoogleSheets(appsScriptUrl: string) {
         };
       });
 
-      // also fetch roots
+      // Fetch roots strictly from the Google Sheet
       try {
         const rootsUrl = new URL(appsScriptUrl);
         rootsUrl.searchParams.set('action', 'getRoots');
         const rootsResp = await fetch(rootsUrl.toString(), { method: 'GET', redirect: 'follow' });
+        let fetchedRoots: string[] = [];
         if (rootsResp.ok) {
           const rootsData = await rootsResp.json();
           if (rootsData && rootsData.success && Array.isArray(rootsData.data)) {
-            const uniqueRoots = Array.from(new Set([...appData.roots, ...rootsData.data]));
-            appData.roots = uniqueRoots;
+            fetchedRoots = rootsData.data.map((r: any) => String(r || '').trim()).filter(Boolean);
           }
+        }
+
+        // Also extract roots from synced invoices in sheet
+        const invoiceRoots = appData.invoices
+          .map((inv) => String(inv.root || '').trim())
+          .filter(Boolean);
+
+        // Derive valid roots strictly from what is present in the Google Sheet
+        const validSheetRoots = Array.from(new Set([...fetchedRoots, ...invoiceRoots]));
+
+        // Overwrite appData.roots with ONLY the roots from the Google Sheet (removes any non-existent roots!)
+        if (validSheetRoots.length > 0) {
+          appData.roots = validSheetRoots;
+        } else if (fetchedRoots.length > 0) {
+          appData.roots = fetchedRoots;
         }
       } catch (rErr) {
         console.error('Error fetching roots from sheets:', rErr);
+        const invoiceRoots = Array.from(
+          new Set(
+            appData.invoices
+              .map((inv) => String(inv.root || '').trim())
+              .filter(Boolean)
+          )
+        );
+        if (invoiceRoots.length > 0) {
+          appData.roots = invoiceRoots;
+        }
       }
 
       appData.sheetsConfig.isConnected = true;
@@ -274,6 +220,17 @@ async function startServer() {
   });
 
   app.use(express.json());
+
+  // Ensure all API routes are never cached by browser and reloaded fresh
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+    // Ensure appData is strictly fresh from disk
+    appData = loadData();
+    next();
+  });
 
   // ----------------------------------------------------
   // API ROUTES
@@ -792,6 +749,11 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`VIJAYA AGENCIES Server running on http://localhost:${PORT}`);
+    if (appData.sheetsConfig.appsScriptUrl) {
+      syncFromGoogleSheets(appData.sheetsConfig.appsScriptUrl)
+        .then(() => console.log('Initial Google Sheet sync complete.'))
+        .catch((e) => console.error('Initial sync error:', e));
+    }
   });
 }
 

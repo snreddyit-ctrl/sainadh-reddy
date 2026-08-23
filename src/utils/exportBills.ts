@@ -1,9 +1,10 @@
 import { Invoice } from '../types';
 import { formatDate } from './format';
+import { getPFStatus } from './printPendingBills';
 
 /**
  * Generates and downloads a CSV file of pending bills for a specific root or all roots
- * Columns: Bill No, Bill Date, Bill Amount, Amount Paid, Amount Pending
+ * Format: SL.NO, Bill No, Bill Date, Amount paid, P/F, Bill Amount
  */
 export function downloadRootPendingBillsCsv(
   rootName: string,
@@ -18,7 +19,13 @@ export function downloadRootPendingBillsCsv(
       const isPending = inv.status === 'Pending' || inv.status === 'Part Paid' || inv.amountPending > 0;
       return matchRoot && isPending;
     })
-    .sort((a, b) => a.billNo.localeCompare(b.billNo, undefined, { numeric: true }));
+    .sort((a, b) => {
+      if (isAll) {
+        const rootComp = a.root.localeCompare(b.root);
+        if (rootComp !== 0) return rootComp;
+      }
+      return a.billNo.localeCompare(b.billNo, undefined, { numeric: true });
+    });
 
   if (pendingInvoices.length === 0) {
     alert(`No pending bills found for ${isAll ? 'any root' : `root "${rootName}"`}.`);
@@ -30,36 +37,44 @@ export function downloadRootPendingBillsCsv(
   const totalPaid = pendingInvoices.reduce((sum, i) => sum + (Number(i.amountPaid) || 0), 0);
   const totalPending = pendingInvoices.reduce((sum, i) => sum + (Number(i.amountPending) || 0), 0);
 
-  // CSV Headers
+  // Exact Requested CSV Headers:
+  // SL.NO, Bill No, Bill Date, Amount paid, P/F, Bill Amount
   const headers = isAll
-    ? ['Root', 'Bill No', 'Bill Date', 'Bill Amount', 'Amount Paid', 'Amount Pending']
-    : ['Bill No', 'Bill Date', 'Bill Amount', 'Amount Paid', 'Amount Pending'];
+    ? ['SL.NO', 'Root', 'Bill No', 'Bill Date', 'Amount paid', 'P/F', 'Bill Amount', 'Amount Pending']
+    : ['SL.NO', 'Bill No', 'Bill Date', 'Amount paid', 'P/F', 'Bill Amount', 'Amount Pending'];
 
-  const rows = pendingInvoices.map((inv) => {
+  const rows = pendingInvoices.map((inv, idx) => {
+    const slNo = idx + 1;
     const billDateFormatted = formatDate(inv.billDate) || inv.billDate;
+    const pf = getPFStatus(inv);
+
     if (isAll) {
       return [
+        slNo,
         `"${inv.root.replace(/"/g, '""')}"`,
         `"${inv.billNo}"`,
         `"${billDateFormatted}"`,
-        inv.billAmount,
         inv.amountPaid,
+        `"${pf}"`,
+        inv.billAmount,
         inv.amountPending,
       ].join(',');
     }
     return [
+      slNo,
       `"${inv.billNo}"`,
       `"${billDateFormatted}"`,
-      inv.billAmount,
       inv.amountPaid,
+      `"${pf}"`,
+      inv.billAmount,
       inv.amountPending,
     ].join(',');
   });
 
   // Total Summary Row
   const totalRow = isAll
-    ? `Total,,,${totalBilled},${totalPaid},${totalPending}`
-    : `Total,,${totalBilled},${totalPaid},${totalPending}`;
+    ? `Total,,,${totalPaid},,${totalBilled},${totalPending}`
+    : `Total,,,${totalPaid},,${totalBilled},${totalPending}`;
 
   const csvContent = [
     headers.join(','),
@@ -85,6 +100,7 @@ export function downloadRootPendingBillsCsv(
 
 /**
  * Copies formatted tab-separated text to clipboard for easy pasting into Excel or Google Sheets
+ * Format: SL.NO, Bill No, Bill Date, Amount paid, P/F, Bill Amount
  */
 export async function copyRootPendingBillsToClipboard(
   rootName: string,
@@ -97,7 +113,13 @@ export async function copyRootPendingBillsToClipboard(
       const isPending = inv.status === 'Pending' || inv.status === 'Part Paid' || inv.amountPending > 0;
       return matchRoot && isPending;
     })
-    .sort((a, b) => a.billNo.localeCompare(b.billNo, undefined, { numeric: true }));
+    .sort((a, b) => {
+      if (isAll) {
+        const rootComp = a.root.localeCompare(b.root);
+        if (rootComp !== 0) return rootComp;
+      }
+      return a.billNo.localeCompare(b.billNo, undefined, { numeric: true });
+    });
 
   if (pendingInvoices.length === 0) return false;
 
@@ -106,20 +128,22 @@ export async function copyRootPendingBillsToClipboard(
   const totalPending = pendingInvoices.reduce((sum, i) => sum + (Number(i.amountPending) || 0), 0);
 
   const headers = isAll
-    ? 'Root\tBill No\tBill Date\tBill Amount\tAmount Paid\tAmount Pending'
-    : 'Bill No\tBill Date\tBill Amount\tAmount Paid\tAmount Pending';
+    ? 'SL.NO\tRoot\tBill No\tBill Date\tAmount paid\tP/F\tBill Amount\tAmount Pending'
+    : 'SL.NO\tBill No\tBill Date\tAmount paid\tP/F\tBill Amount\tAmount Pending';
 
-  const rows = pendingInvoices.map((inv) => {
+  const rows = pendingInvoices.map((inv, idx) => {
+    const slNo = idx + 1;
     const billDateFormatted = formatDate(inv.billDate) || inv.billDate;
+    const pf = getPFStatus(inv);
     if (isAll) {
-      return `${inv.root}\t${inv.billNo}\t${billDateFormatted}\t${inv.billAmount}\t${inv.amountPaid}\t${inv.amountPending}`;
+      return `${slNo}\t${inv.root}\t${inv.billNo}\t${billDateFormatted}\t${inv.amountPaid}\t${pf}\t${inv.billAmount}\t${inv.amountPending}`;
     }
-    return `${inv.billNo}\t${billDateFormatted}\t${inv.billAmount}\t${inv.amountPaid}\t${inv.amountPending}`;
+    return `${slNo}\t${inv.billNo}\t${billDateFormatted}\t${inv.amountPaid}\t${pf}\t${inv.billAmount}\t${inv.amountPending}`;
   });
 
   const totalRow = isAll
-    ? `Total\t\t\t${totalBilled}\t${totalPaid}\t${totalPending}`
-    : `Total\t\t${totalBilled}\t${totalPaid}\t${totalPending}`;
+    ? `Total\t\t\t\t${totalPaid}\t\t${totalBilled}\t${totalPending}`
+    : `Total\t\t\t${totalPaid}\t\t${totalBilled}\t${totalPending}`;
 
   const textContent = `${headers}\n${rows.join('\n')}\n\n${totalRow}`;
 

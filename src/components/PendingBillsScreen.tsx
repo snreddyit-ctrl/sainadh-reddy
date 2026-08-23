@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Clock, Search, CreditCard, ChevronRight, MapPin, Calendar, Receipt, Download } from 'lucide-react';
+import { Clock, Search, CreditCard, ChevronRight, MapPin, Calendar, Receipt, Download, Printer } from 'lucide-react';
 import { Invoice } from '../types';
 import { formatCurrency, formatDate } from '../utils/format';
 import { downloadRootPendingBillsCsv } from '../utils/exportBills';
+import { printRootPendingBills } from '../utils/printPendingBills';
 
 interface PendingBillsScreenProps {
   invoices: Invoice[];
@@ -24,7 +25,7 @@ export const PendingBillsScreen: React.FC<PendingBillsScreenProps> = ({
   const [pendingFilter, setPendingFilter] = useState<'ALL_PENDING' | 'PENDING_ONLY' | 'PART_PAID_ONLY'>('ALL_PENDING');
 
   // Filter only Pending or Part Paid invoices
-  const pendingInvoices = invoices.filter((inv) => inv.status === 'Pending' || inv.status === 'Part Paid');
+  const pendingInvoices = invoices.filter((inv) => inv.status === 'Pending' || inv.status === 'Part Paid' || inv.amountPending > 0);
 
   const filtered = pendingInvoices.filter((inv) => {
     const q = searchQuery.toLowerCase().trim();
@@ -33,7 +34,7 @@ export const PendingBillsScreen: React.FC<PendingBillsScreenProps> = ({
       inv.billNo.toLowerCase().includes(q) ||
       inv.root.toLowerCase().includes(q);
 
-    const matchesRoot = selectedRoot === 'All' || inv.root === selectedRoot;
+    const matchesRoot = selectedRoot === 'All' || inv.root.toLowerCase() === selectedRoot.toLowerCase();
 
     let matchesFilter = true;
     if (pendingFilter === 'PENDING_ONLY') matchesFilter = inv.status === 'Pending';
@@ -43,6 +44,18 @@ export const PendingBillsScreen: React.FC<PendingBillsScreenProps> = ({
   });
 
   const totalPendingSum = filtered.reduce((sum, inv) => sum + inv.amountPending, 0);
+
+  const handlePrint = () => {
+    printRootPendingBills(selectedRoot, invoices);
+  };
+
+  const handleDownload = () => {
+    if (onOpenDownloadModal) {
+      onOpenDownloadModal(selectedRoot === 'All' ? 'All' : selectedRoot);
+    } else {
+      downloadRootPendingBillsCsv(selectedRoot === 'All' ? 'All' : selectedRoot, invoices);
+    }
+  };
 
   return (
     <div className="space-y-4 pb-12 animate-fadeIn">
@@ -129,7 +142,7 @@ export const PendingBillsScreen: React.FC<PendingBillsScreenProps> = ({
               onChange={(e) => setSelectedRoot(e.target.value)}
               className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 focus:outline-none"
             >
-              <option value="All">All Roots</option>
+              <option value="All">All Routes</option>
               {roots.map((r) => (
                 <option key={r} value={r}>
                   {r}
@@ -139,18 +152,22 @@ export const PendingBillsScreen: React.FC<PendingBillsScreenProps> = ({
 
             <button
               type="button"
-              onClick={() => {
-                if (onOpenDownloadModal) {
-                  onOpenDownloadModal(selectedRoot === 'All' ? 'All' : selectedRoot);
-                } else {
-                  downloadRootPendingBillsCsv(selectedRoot === 'All' ? 'All' : selectedRoot, invoices);
-                }
-              }}
+              onClick={handlePrint}
               className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs"
-              title="Download pending bills formatted: Bill No, Bill Date, Bill Amount, Amount Paid, Amount Pending"
+              title="Print pending bills statement"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs"
+              title="Download pending bills formatted: SL.NO, Bill No, Bill Date, Amount paid, P/F, Bill Amount"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Download Bills</span>
+              <span>Download</span>
             </button>
           </div>
         </div>

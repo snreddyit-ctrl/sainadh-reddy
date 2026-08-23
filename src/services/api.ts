@@ -7,10 +7,19 @@ export interface ApiResponse<T = any> {
   meta?: any;
 }
 
+const noCacheHeaders = {
+  'Cache-Control': 'no-cache, no-store, must-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
+
 export const api = {
   async getInvoices(): Promise<{ invoices: Invoice[]; isConnected: boolean; lastSynced: string | null }> {
     try {
-      const res = await fetch('/api/invoices');
+      const res = await fetch(`/api/invoices?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: noCacheHeaders,
+      });
       const json: ApiResponse<Invoice[]> = await res.json();
       return {
         invoices: json.data || [],
@@ -33,7 +42,7 @@ export const api = {
     try {
       const res = await fetch('/api/invoices', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
         body: JSON.stringify(invoiceData),
       });
       return await res.json();
@@ -46,7 +55,7 @@ export const api = {
     try {
       const res = await fetch('/api/invoices/payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
         body: JSON.stringify({ billNo, currentPayment }),
       });
       return await res.json();
@@ -59,7 +68,7 @@ export const api = {
     try {
       const res = await fetch(`/api/invoices/${encodeURIComponent(billNo)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
         body: JSON.stringify(data),
       });
       return await res.json();
@@ -72,6 +81,7 @@ export const api = {
     try {
       const res = await fetch(`/api/invoices/${encodeURIComponent(billNo)}`, {
         method: 'DELETE',
+        headers: noCacheHeaders,
       });
       return await res.json();
     } catch (err: any) {
@@ -81,11 +91,14 @@ export const api = {
 
   async getRoots(): Promise<string[]> {
     try {
-      const res = await fetch('/api/roots');
+      const res = await fetch(`/api/roots?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: noCacheHeaders,
+      });
       const json = await res.json();
-      return json.data || ['Pattapuram', 'Hyderabad', 'Vijayawada'];
+      return Array.isArray(json.data) ? json.data : [];
     } catch (err) {
-      return ['Pattapuram', 'Hyderabad', 'Vijayawada'];
+      return [];
     }
   },
 
@@ -93,7 +106,7 @@ export const api = {
     try {
       const res = await fetch('/api/roots', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
         body: JSON.stringify({ rootName }),
       });
       return await res.json();
@@ -106,7 +119,7 @@ export const api = {
     try {
       const res = await fetch(`/api/roots/${encodeURIComponent(oldRootName)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
         body: JSON.stringify({ newRootName }),
       });
       return await res.json();
@@ -119,6 +132,7 @@ export const api = {
     try {
       const res = await fetch(`/api/roots/${encodeURIComponent(rootName)}`, {
         method: 'DELETE',
+        headers: noCacheHeaders,
       });
       return await res.json();
     } catch (err: any) {
@@ -128,7 +142,10 @@ export const api = {
 
   async getSheetsConfig(): Promise<SheetsConfig> {
     try {
-      const res = await fetch('/api/sheets-config');
+      const res = await fetch(`/api/sheets-config?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: noCacheHeaders,
+      });
       const json = await res.json();
       return json.data || { appsScriptUrl: '', isConnected: false, lastSynced: null, mode: 'local_fallback' };
     } catch (err) {
@@ -140,7 +157,7 @@ export const api = {
     try {
       const res = await fetch('/api/sheets-config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
         body: JSON.stringify({ appsScriptUrl }),
       });
       return await res.json();
@@ -151,7 +168,10 @@ export const api = {
 
   async forceSync(): Promise<{ success: boolean; message: string; lastSynced?: string }> {
     try {
-      const res = await fetch('/api/sync', { method: 'POST' });
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: noCacheHeaders,
+      });
       return await res.json();
     } catch (err: any) {
       return { success: false, message: err.message || 'Sync failed' };

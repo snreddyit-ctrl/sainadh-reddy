@@ -1,0 +1,100 @@
+{
+  "roots": [
+    "AMARAVATHI ROAD 1",
+    "AMARAVATHI ROAD 2",
+    "BRODIPETA 1",
+    "BRODIPETA 2",
+    "LAKSHMIPURAM 1",
+    "LAKSHMIPURAM 2",
+    "KORITAPADU",
+    "SVN COLONY",
+    "A T AGRAHARAM",
+    "HOUSING BOARD",
+    "ARUNDELPETA",
+    "PATTABHIPURAM",
+    "OLD GUNTUR",
+    "CHOWTRA",
+    "NEHRU NAGAR",
+    "P S NAGAR",
+    "NAGARAMPALEM",
+    "RTC COLONY",
+    "OLD GUNTUR ( CADBURY)",
+    "NANDIVELUGU ROAD( CADBURY)",
+    "PONNUR ROAD ( CADBURY)",
+    "CHOWTRA (CADBURY)",
+    "NEHRU NAGAR ( CADBURY )",
+    "MANGALDAS NAGAR ( CADBURY)",
+    "RAILPETA ( CADBURY)",
+    "VEG MARKET ( CADBURY)",
+    "R AGRAHARAM ( CADBURY)",
+    "NAGARAMPALEM ( CADBURY)",
+    "RTC COLONY ( CADBURY )",
+    "OLD CLUB ROAD ( CADBURY )"
+  ],
+  "sheetsConfig": {
+    "appsScriptUrl": "https://script.google.com/macros/s/AKfycbwdunEaJVY7tdWTmvSDM_7rMe8UBRI937HVu-jxQmwUnxCou0o6gq9V6-JVLXGupf3eNw/exec",
+    "isConnected": true,
+    "lastSynced": "2026-08-23T14:35:35.594Z"
+  },
+  "invoices": [
+    {
+      "billNo": "243",
+      "root": "AMARAVATHI ROAD 1",
+      "billDate": "2026-08-23",
+      "billAmount": 768,
+      "amountPaid": 0,
+      "amountPending": 768,
+      "status": "Pending",
+      "updatedAt": "2026-08-23T14:32:46.569Z"
+    },
+    {
+      "billNo": "456",
+      "root": "AMARAVATHI ROAD 1",
+      "billDate": "2026-08-23",
+      "billAmount": 978,
+      "amountPaid": 0,
+      "amountPending": 978,
+      "status": "Pending",
+      "updatedAt": "2026-08-23T14:32:46.569Z"
+    },
+    {
+      "billNo": "876",
+      "root": "AMARAVATHI ROAD 1",
+      "billDate": "2026-08-23",
+      "billAmount": 1015,
+      "amountPaid": 200,
+      "amountPending": 815,
+      "status": "Part Paid",
+      "updatedAt": "2026-08-23T14:32:46.569Z"
+    }
+  ],
+  "payments": [
+    {
+      "id": "pay-1",
+      "billNo": "1002",
+      "amount": 25000,
+      "date": "2026-08-20",
+      "timestamp": 1787408862464,
+      "previousPaid": 0,
+      "newPaid": 25000
+    },
+    {
+      "id": "pay-2",
+      "billNo": "1004",
+      "amount": 30000,
+      "date": "2026-08-19",
+      "timestamp": 1787322462464,
+      "previousPaid": 0,
+      "newPaid": 30000
+    },
+    {
+      "id": "pay-3",
+      "billNo": "1005",
+      "amount": 5000,
+      "date": "2026-08-21",
+      "timestamp": 1787491662464,
+      "previousPaid": 0,
+      "newPaid": 5000
+    }
+  ]
+}

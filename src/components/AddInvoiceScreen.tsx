@@ -27,7 +27,14 @@ export const AddInvoiceScreen: React.FC<AddInvoiceScreenProps> = ({
   onOpenManageRoots,
 }) => {
   const [billNo, setBillNo] = useState('');
-  const [root, setRoot] = useState(roots[0] || 'Pattapuram');
+  const [root, setRoot] = useState(roots[0] || '');
+
+  // Keep root in sync with roots prop if initial was empty
+  React.useEffect(() => {
+    if (!root && roots.length > 0) {
+      setRoot(roots[0]);
+    }
+  }, [roots, root]);
   const [billDate, setBillDate] = useState(getTodayDateString());
   const [billAmount, setBillAmount] = useState('');
   const [amountPaid, setAmountPaid] = useState('0');
