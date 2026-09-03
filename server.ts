@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import JSZip from 'jszip';
 import { createServer as createViteServer } from 'vite';
 
@@ -25,10 +26,21 @@ interface PaymentLog {
   newPaid: number;
 }
 
+interface UserAuth {
+  username: string;
+  passwordHash: string;
+  name: string;
+  email: string;
+  securityQuestion: string;
+  securityAnswerHash: string;
+  recoveryPin: string;
+}
+
 interface AppData {
   invoices: Invoice[];
   roots: string[];
   payments: PaymentLog[];
+  auth?: UserAuth;
   sheetsConfig: {
     appsScriptUrl: string;
     isConnected: boolean;
@@ -39,9 +51,32 @@ interface AppData {
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'database.json');
 
+// Security hashing helpers
+function hashPassword(password: string): string {
+  return crypto.createHash('sha256').update(`salt_va_p_${String(password || '').trim()}`).digest('hex');
+}
+
+function hashAnswer(answer: string): string {
+  return crypto.createHash('sha256').update(`salt_va_a_${String(answer || '').trim().toLowerCase()}`).digest('hex');
+}
+
+const DEFAULT_AUTH: UserAuth = {
+  username: 'admin',
+  passwordHash: hashPassword('admin123'),
+  name: 'Admin User',
+  email: 'snreddy.it@gmail.com',
+  securityQuestion: 'What is your distribution agency name?',
+  securityAnswerHash: hashAnswer('VIJAYA AGENCIES'),
+  recoveryPin: '123456',
+};
+
+// In-memory active session tokens with 30 days validity
+const activeSessions = new Map<string, { username: string; expiresAt: number }>();
+
 // Default initial data matching distribution business requirements
 const DEFAULT_DATA: AppData = {
   roots: [],
+  auth: { ...DEFAULT_AUTH },
   sheetsConfig: {
     appsScriptUrl: '',
     isConnected: false,
@@ -58,7 +93,11 @@ function loadData(): AppData {
     }
     if (fs.existsSync(DATA_FILE)) {
       const content = fs.readFileSync(DATA_FILE, 'utf-8');
-      return { ...DEFAULT_DATA, ...JSON.parse(content) };
+      const loaded: AppData = { ...DEFAULT_DATA, ...JSON.parse(content) };
+      if (!loaded.auth || !loaded.auth.passwordHash) {
+        loaded.auth = { ...DEFAULT_AUTH };
+      }
+      return loaded;
     }
   } catch (err) {
     console.error('Error reading database file, using defaults:', err);
@@ -239,6 +278,275 @@ async function startServer() {
   // Health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', name: 'VIJAYA AGENCIES API' });
+  });
+
+  // ----------------------------------------------------
+  // AUTHENTICATION & PASSWORD RESET ROUTES
+  // ----------------------------------------------------
+
+  // GET Auth Status / Verify Token
+  app.get('/api/auth/status', (req, res) => {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '') || (req.query.token as string) || (req.headers['x-auth-token'] as string);
+
+    if (token && activeSessions.has(token)) {
+      const session = activeSessions.get(token)!;
+      if (session.expiresAt > Date.now()) {
+        return res.json({
+          success: true,
+          isAuthenticated: true,
+          user: {
+            username: appData.auth?.username || 'admin',
+            name: appData.auth?.name || 'Admin User',
+            email: appData.auth?.email || 'snreddy.it@gmail.com',
+            securityQuestion: appData.auth?.securityQuestion,
+          },
+        });
+      }
+      activeSessions.delete(token);
+    }
+
+    return res.json({
+      success: true,
+      isAuthenticated: false,
+      user: null,
+    });
+  });
+
+  // POST Login
+  app.post('/api/auth/login', (req, res) => {
+    try {
+      const { username, password } = req.body;
+      const enteredUser = String(username || '').trim().toLowerCase();
+      const enteredPass = String(password || '');
+
+      if (!enteredUser || !enteredPass) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enter both username/email and password.',
+        });
+      }
+
+      const currentAuth = appData.auth || DEFAULT_AUTH;
+      const userMatch =
+        enteredUser === currentAuth.username.toLowerCase() ||
+        enteredUser === currentAuth.email.toLowerCase();
+      const passMatch = hashPassword(enteredPass) === currentAuth.passwordHash;
+
+      if (!userMatch || !passMatch) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid username/email or password. Please try again.',
+        });
+      }
+
+      // Generate secure session token
+      const token = crypto.randomBytes(32).toString('hex');
+      activeSessions.set(token, {
+        username: currentAuth.username,
+        expiresAt: Date.now() + 30 * 86400 * 1000, // 30 days
+      });
+
+      return res.json({
+        success: true,
+        message: 'Login successful.',
+        token,
+        user: {
+          username: currentAuth.username,
+          name: currentAuth.name,
+          email: currentAuth.email,
+          securityQuestion: currentAuth.securityQuestion,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message || 'Login error.' });
+    }
+  });
+
+  // POST Logout
+  app.post('/api/auth/logout', (req, res) => {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '') || req.body?.token;
+    if (token) {
+      activeSessions.delete(token);
+    }
+    return res.json({ success: true, message: 'Logged out successfully.' });
+  });
+
+  // POST Get Security Question for User
+  app.post('/api/auth/reset-password/get-question', (req, res) => {
+    try {
+      const { username } = req.body;
+      const enteredUser = String(username || '').trim().toLowerCase();
+      const currentAuth = appData.auth || DEFAULT_AUTH;
+
+      const userMatch =
+        enteredUser === currentAuth.username.toLowerCase() ||
+        enteredUser === currentAuth.email.toLowerCase();
+
+      if (!userMatch) {
+        return res.status(404).json({
+          success: false,
+          message: 'No registered user found with this username or email.',
+        });
+      }
+
+      return res.json({
+        success: true,
+        securityQuestion: currentAuth.securityQuestion || 'What is your distribution agency name?',
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message || 'Error fetching question.' });
+    }
+  });
+
+  // POST Verify and Reset Password
+  app.post('/api/auth/reset-password/verify-and-reset', (req, res) => {
+    try {
+      const { username, method, securityAnswer, recoveryPin, newPassword } = req.body;
+      const enteredUser = String(username || '').trim().toLowerCase();
+      const currentAuth = appData.auth || DEFAULT_AUTH;
+
+      const userMatch =
+        enteredUser === currentAuth.username.toLowerCase() ||
+        enteredUser === currentAuth.email.toLowerCase();
+
+      if (!userMatch) {
+        return res.status(404).json({
+          success: false,
+          message: 'No registered user found with this username or email.',
+        });
+      }
+
+      if (!newPassword || String(newPassword).trim().length < 4) {
+        return res.status(400).json({
+          success: false,
+          message: 'New password must be at least 4 characters long.',
+        });
+      }
+
+      if (method === 'security_question') {
+        const enteredAnsHash = hashAnswer(String(securityAnswer || ''));
+        if (enteredAnsHash !== currentAuth.securityAnswerHash) {
+          return res.status(400).json({
+            success: false,
+            message: 'Incorrect answer to the security question. Please check case and spelling, or use the 6-digit recovery PIN.',
+          });
+        }
+      } else if (method === 'recovery_pin') {
+        const cleanPin = String(recoveryPin || '').trim();
+        if (cleanPin !== currentAuth.recoveryPin.trim()) {
+          return res.status(400).json({
+            success: false,
+            message: 'Incorrect 6-digit master recovery PIN.',
+          });
+        }
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid reset verification method.',
+        });
+      }
+
+      // Update password
+      currentAuth.passwordHash = hashPassword(newPassword);
+      appData.auth = currentAuth;
+      saveData(appData);
+
+      // Create new session token for immediate login
+      const token = crypto.randomBytes(32).toString('hex');
+      activeSessions.set(token, {
+        username: currentAuth.username,
+        expiresAt: Date.now() + 30 * 86400 * 1000,
+      });
+
+      return res.json({
+        success: true,
+        message: 'Password has been reset successfully. You are now logged in.',
+        token,
+        user: {
+          username: currentAuth.username,
+          name: currentAuth.name,
+          email: currentAuth.email,
+          securityQuestion: currentAuth.securityQuestion,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message || 'Error resetting password.' });
+    }
+  });
+
+  // POST Change Password (when authenticated)
+  app.post('/api/auth/change-password', (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const currentAuth = appData.auth || DEFAULT_AUTH;
+
+      if (hashPassword(currentPassword) !== currentAuth.passwordHash) {
+        return res.status(400).json({
+          success: false,
+          message: 'Current password is incorrect.',
+        });
+      }
+
+      if (!newPassword || String(newPassword).trim().length < 4) {
+        return res.status(400).json({
+          success: false,
+          message: 'New password must be at least 4 characters long.',
+        });
+      }
+
+      currentAuth.passwordHash = hashPassword(newPassword);
+      appData.auth = currentAuth;
+      saveData(appData);
+
+      return res.json({
+        success: true,
+        message: 'Password updated successfully.',
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message || 'Error updating password.' });
+    }
+  });
+
+  // POST Update Profile & Recovery Settings
+  app.post('/api/auth/update-profile', (req, res) => {
+    try {
+      const { name, email, username, securityQuestion, securityAnswer, recoveryPin, currentPassword } = req.body;
+      const currentAuth = appData.auth || DEFAULT_AUTH;
+
+      if (hashPassword(currentPassword) !== currentAuth.passwordHash) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enter your current password to save security settings.',
+        });
+      }
+
+      if (name) currentAuth.name = String(name).trim();
+      if (email) currentAuth.email = String(email).trim();
+      if (username) currentAuth.username = String(username).trim();
+      if (securityQuestion) currentAuth.securityQuestion = String(securityQuestion).trim();
+      if (securityAnswer) currentAuth.securityAnswerHash = hashAnswer(String(securityAnswer).trim());
+      if (recoveryPin && String(recoveryPin).trim().length >= 4) {
+        currentAuth.recoveryPin = String(recoveryPin).trim();
+      }
+
+      appData.auth = currentAuth;
+      saveData(appData);
+
+      return res.json({
+        success: true,
+        message: 'Account profile and recovery settings saved successfully.',
+        user: {
+          username: currentAuth.username,
+          name: currentAuth.name,
+          email: currentAuth.email,
+          securityQuestion: currentAuth.securityQuestion,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message || 'Error updating profile.' });
+    }
   });
 
   // GET All Invoices

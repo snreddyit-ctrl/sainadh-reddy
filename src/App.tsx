@@ -15,6 +15,7 @@ import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 import { ManageRootsModal } from './components/ManageRootsModal';
 import { DownloadPendingBillsModal } from './components/DownloadPendingBillsModal';
 import { ExportCenterModal } from './components/ExportCenterModal';
+import { SyncDataPopup } from './components/SyncDataPopup';
 import { api } from './services/api';
 import {
   ActiveScreen,
@@ -49,6 +50,7 @@ export default function App() {
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [downloadModalRoot, setDownloadModalRoot] = useState<string>('All');
   const [isExportCenterOpen, setIsExportCenterOpen] = useState(false);
+  const [isSyncPopupOpen, setIsSyncPopupOpen] = useState(true);
 
   // Fetch fresh data from database
   const fetchData = async (showLoadingSpinner = false) => {
@@ -105,216 +107,266 @@ export default function App() {
   }, []);
 
   // Force Google Sheet Sync
-  const handleForceSync = async () => {
+  const handleForceSync = async (): Promise<{ success: boolean; message?: string }> => {
     setIsSyncing(true);
     try {
-      await api.forceSync();
+      const res = await api.forceSync();
       await fetchData();
-    } catch (err) {
+      return res;
+    } catch (err: any) {
       console.error('Sync failed:', err);
+      return { success: false, message: err?.message || 'Sync failed' };
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Compute Dashboard Metrics & Summaries
-  const dashboardSummary: DashboardSummary = useMemo(() => {
-    const totalBills = invoices.length;
-    const totalBillAmount = invoices.reduce((acc, i) => acc + (Number(i.billAmount) || 0), 0);
-    const totalAmountPaid = invoices.reduce((acc, i) => acc + (Number(i.amountPaid) || 0), 0);
-    const totalPendingAmount = invoices.reduce((acc, i) => acc + (Number(i.amountPending) || 0), 0);
-
-    const pendingBillsCount = invoices.filter((i) => i.status === 'Pending').length;
-    const partPaidBillsCount = invoices.filter((i) => i.status === 'Part Paid').length;
-    const paidBillsCount = invoices.filter((i) => i.status === 'Paid').length;
-
-    const collectionRate = totalBillAmount > 0 ? Math.round((totalAmountPaid / totalBillAmount) * 100) : 0;
-
-    // Aggregate by Root
-    const rootMap = new Map<string, { pending: number; total: number; paid: number; count: number; pendingCount: number }>();
-    
-    roots.forEach((r) => {
-      rootMap.set(r, { pending: 0, total: 0, paid: 0, count: 0, pendingCount: 0 });
-    });
-
-    invoices.forEach((inv) => {
-      const r = inv.root || 'Unassigned';
-      const existing = rootMap.get(r) || { pending: 0, total: 0, paid: 0, count: 0, pendingCount: 0 };
-      existing.pending += inv.amountPending || 0;
-      existing.total += inv.billAmount || 0;
-      existing.paid += inv.amountPaid || 0;
-      existing.count += 1;
-      if (inv.status === 'Pending' || inv.status === 'Part Paid') {
-        existing.pendingCount += 1;
+  // Save Sheets Configuration
+  const handleSaveSheetsConfig = async (appsScriptUrl: string) => {
+    try {
+      const res = await api.updateSheetsConfig(appsScriptUrl);
+      if (res.success && res.data) {
+        setSheetsConfig(res.data);
       }
-      rootMap.set(r, existing);
-    });
+      await fetchData();
+    } catch (err) {
+      console.error('Failed to save sheets configuration:', err);
+      throw err;
+    }
+  };
 
-    const rootPending: RootPendingSummary[] = Array.from(rootMap.entries())
-      .map(([root, stats]) => ({
-        root,
-        pendingAmount: stats.pending,
-        totalAmount: stats.total,
-        paidAmount: stats.paid,
-        billCount: stats.count,
-        pendingCount: stats.pendingCount,
-      }))
-      .sort((a, b) => b.pendingAmount - a.pendingAmount);
-
-    return {
-      totalBills,
-      totalBillAmount,
-      totalAmountPaid,
-      totalPendingAmount,
-      pendingBillsCount,
-      partPaidBillsCount,
-      paidBillsCount,
-      collectionRate,
-      rootPending,
-    };
-  }, [invoices, roots]);
-
-  // Handler: Save Invoice
+  // Add / Create Invoice
   const handleSaveInvoice = async (invoiceData: {
     billNo: string;
     root: string;
     billDate: string;
     billAmount: number;
     amountPaid: number;
-  }) => {
-    const res = await api.addInvoice(invoiceData);
-    if (res.success && res.data) {
-      setInvoices((prev) => [res.data!, ...prev.filter((i) => i.billNo !== res.data!.billNo)]);
-      return { success: true, message: res.message };
-    }
-    return { success: false, message: res.message || 'Failed to save invoice.' };
-  };
-
-  // Handler: Record Payment
-  const handleRecordPayment = async (billNo: string, currentPayment: number) => {
-    const res = await api.addPayment(billNo, currentPayment);
-    if (res.success && res.data) {
-      setInvoices((prev) =>
-        prev.map((i) => (i.billNo === billNo ? res.data! : i))
-      );
-      if (selectedInvoice && selectedInvoice.billNo === billNo) {
-        setSelectedInvoice(res.data);
+  }): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await api.addInvoice(invoiceData);
+      if (res.success) {
+        await fetchData();
+        setActiveScreen('all_bills');
+        return { success: true };
       }
-      return { success: true, message: res.message };
+      return { success: false, message: res.message || 'Failed to save invoice' };
+    } catch (err: any) {
+      console.error('Failed to save invoice:', err);
+      return { success: false, message: err.message || 'Error occurred while saving invoice' };
     }
-    return { success: false, message: res.message || 'Failed to record payment.' };
   };
 
-  // Handler: Update Invoice
-  const handleUpdateInvoice = async (billNo: string, updateData: Partial<Invoice>) => {
-    const res = await api.updateInvoice(billNo, updateData);
-    if (res.success && res.data) {
-      setInvoices((prev) =>
-        prev.map((i) => (i.billNo === billNo ? res.data! : i))
-      );
-      setSelectedInvoice(res.data);
-      return true;
+  // Record / Add Payment
+  const handleRecordPayment = async (
+    billNo: string,
+    currentPayment: number
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await api.addPayment(billNo, currentPayment);
+      if (res.success) {
+        await fetchData();
+        return { success: true };
+      }
+      return { success: false, message: res.message || 'Failed to record payment' };
+    } catch (err: any) {
+      console.error('Failed to record payment:', err);
+      return { success: false, message: err.message || 'Error occurred while recording payment' };
     }
-    return false;
   };
 
-  // Handler: Delete Invoice
+  // Update existing invoice
+  const handleUpdateInvoice = async (billNo: string, data: Partial<Invoice>): Promise<boolean> => {
+    try {
+      const res = await api.updateInvoice(billNo, data);
+      if (res.success && res.data) {
+        const updated = res.data;
+        setInvoices((prev) => prev.map((inv) => (inv.billNo === updated.billNo ? updated : inv)));
+        setSelectedInvoice(updated);
+        await fetchData();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to update invoice:', err);
+      return false;
+    }
+  };
+
+  // Delete invoice handler
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
       const res = await api.deleteInvoice(deleteTarget.billNo);
       if (res.success) {
-        setInvoices((prev) => prev.filter((i) => i.billNo !== deleteTarget.billNo));
-        setDeleteTarget(null);
+        setInvoices((prev) => prev.filter((inv) => inv.billNo !== deleteTarget.billNo));
         setSelectedInvoice(null);
+        setDeleteTarget(null);
+        await fetchData();
+      } else {
+        alert(res.message || 'Failed to delete invoice');
       }
     } catch (err) {
-      console.error('Delete error:', err);
+      console.error('Failed to delete invoice:', err);
+      alert('Failed to delete invoice. Please try again.');
     } finally {
       setIsDeleting(false);
     }
   };
 
-  // Handler: Bulk Delete Paid Invoices
-  const handleBulkDeleteInvoices = async (billNos: string[]) => {
+  // Bulk delete paid bills
+  const handleBulkDeleteInvoices = async (
+    billNumbers: string[]
+  ): Promise<{ success: boolean; count: number; message?: string }> => {
+    if (!billNumbers.length) return { success: true, count: 0 };
     try {
-      const res = await api.bulkDeleteInvoices(billNos);
+      const res = await api.bulkDeleteInvoices(billNumbers);
       if (res.success) {
-        const deletedSet = new Set(billNos);
-        setInvoices((prev) => prev.filter((i) => !deletedSet.has(i.billNo)));
-        if (selectedInvoice && deletedSet.has(selectedInvoice.billNo)) {
+        setInvoices((prev) => prev.filter((inv) => !billNumbers.includes(inv.billNo)));
+        if (selectedInvoice && billNumbers.includes(selectedInvoice.billNo)) {
           setSelectedInvoice(null);
         }
-        return {
-          success: true,
-          count: res.data?.deletedCount ?? billNos.length,
-          message: res.message,
+        await fetchData();
+        return { success: true, count: res.data?.deletedCount || billNumbers.length };
+      }
+      return { success: false, count: 0, message: res.message || 'Failed to delete paid bills' };
+    } catch (err: any) {
+      console.error('Failed to bulk delete invoices:', err);
+      return { success: false, count: 0, message: err.message || 'Failed to bulk delete invoices' };
+    }
+  };
+
+  // Root management
+  const handleAddNewRoot = async (newRoot: string): Promise<boolean> => {
+    try {
+      const res = await api.addRoot(newRoot);
+      if (res.success && res.data) {
+        setRoots(res.data);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to add new root:', err);
+      return false;
+    }
+  };
+
+  const handleUpdateRoot = async (oldName: string, newName: string): Promise<boolean> => {
+    try {
+      const res = await api.updateRoot(oldName, newName);
+      if (res.success && res.data) {
+        setRoots(res.data.roots);
+        await fetchData();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to rename root:', err);
+      return false;
+    }
+  };
+
+  const handleDeleteRoot = async (rootName: string): Promise<boolean> => {
+    try {
+      const res = await api.deleteRoot(rootName);
+      if (res.success && res.data) {
+        setRoots(res.data);
+        await fetchData();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to delete root:', err);
+      return false;
+    }
+  };
+
+  // Calculations for Dashboard
+  const dashboardSummary: DashboardSummary = useMemo(() => {
+    let totalBills = invoices.length;
+    let totalBillAmount = 0;
+    let totalAmountPaid = 0;
+    let totalPendingAmount = 0;
+    let paidBillsCount = 0;
+    let partPaidBillsCount = 0;
+    let pendingBillsCount = 0;
+
+    const rootMap: {
+      [root: string]: {
+        totalAmount: number;
+        paidAmount: number;
+        pendingAmount: number;
+        billCount: number;
+        pendingCount: number;
+      };
+    } = {};
+
+    roots.forEach((r) => {
+      rootMap[r] = {
+        totalAmount: 0,
+        paidAmount: 0,
+        pendingAmount: 0,
+        billCount: 0,
+        pendingCount: 0,
+      };
+    });
+
+    invoices.forEach((inv) => {
+      totalBillAmount += inv.billAmount || 0;
+      totalAmountPaid += inv.amountPaid || 0;
+      totalPendingAmount += inv.amountPending || 0;
+
+      if (inv.status === 'Paid') {
+        paidBillsCount++;
+      } else if (inv.status === 'Part Paid') {
+        partPaidBillsCount++;
+      } else {
+        pendingBillsCount++;
+      }
+
+      const r = inv.root || 'Unassigned';
+      if (!rootMap[r]) {
+        rootMap[r] = {
+          totalAmount: 0,
+          paidAmount: 0,
+          pendingAmount: 0,
+          billCount: 0,
+          pendingCount: 0,
         };
       }
-      return {
-        success: false,
-        count: 0,
-        message: res.message || 'Failed to delete selected paid invoices.',
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        count: 0,
-        message: err.message || 'Network error occurred during bulk delete.',
-      };
-    }
-  };
-
-  // Handler: Add Root
-  const handleAddNewRoot = async (rootName: string) => {
-    const res = await api.addRoot(rootName);
-    if (res.success && res.data) {
-      setRoots(res.data);
-      return true;
-    }
-    return false;
-  };
-
-  // Handler: Update / Rename Root
-  const handleUpdateRoot = async (oldRootName: string, newRootName: string) => {
-    const res = await api.updateRoot(oldRootName, newRootName);
-    if (res.success && res.data) {
-      setRoots(res.data.roots);
-      // update invoice states locally
-      setInvoices((prev) =>
-        prev.map((i) =>
-          i.root.toLowerCase() === oldRootName.toLowerCase() ? { ...i, root: newRootName } : i
-        )
-      );
-      if (selectedInvoice && selectedInvoice.root.toLowerCase() === oldRootName.toLowerCase()) {
-        setSelectedInvoice({ ...selectedInvoice, root: newRootName });
+      rootMap[r].totalAmount += inv.billAmount || 0;
+      rootMap[r].paidAmount += inv.amountPaid || 0;
+      rootMap[r].pendingAmount += inv.amountPending || 0;
+      rootMap[r].billCount += 1;
+      if (inv.status !== 'Paid' && (inv.amountPending || 0) > 0) {
+        rootMap[r].pendingCount += 1;
       }
-      return true;
-    }
-    return false;
-  };
+    });
 
-  // Handler: Delete Root
-  const handleDeleteRoot = async (rootName: string) => {
-    const res = await api.deleteRoot(rootName);
-    if (res.success && res.data) {
-      setRoots(res.data);
-      return true;
-    }
-    return false;
-  };
+    const collectionRate = totalBillAmount > 0 ? (totalAmountPaid / totalBillAmount) * 100 : 0;
 
-  // Handler: Update Sheets Config URL
-  const handleSaveSheetsConfig = async (url: string) => {
-    const res = await api.updateSheetsConfig(url);
-    if (res.success && res.data) {
-      setSheetsConfig(res.data);
-      await fetchData();
-      return { success: true, message: res.message };
-    }
-    return { success: false, message: res.message || 'Connection test failed.' };
-  };
+    const rootPending: RootPendingSummary[] = Object.keys(rootMap).map((root) => ({
+      root,
+      totalAmount: rootMap[root].totalAmount,
+      paidAmount: rootMap[root].paidAmount,
+      pendingAmount: rootMap[root].pendingAmount,
+      billCount: rootMap[root].billCount,
+      pendingCount: rootMap[root].pendingCount,
+    }));
+
+    return {
+      totalBills,
+      totalBillAmount,
+      totalAmountPaid,
+      totalPendingAmount,
+      paidBillsCount,
+      partPaidBillsCount,
+      pendingBillsCount,
+      collectionRate,
+      rootPending,
+    };
+  }, [invoices, roots]);
 
   // Quick Pay from cards
   const handleQuickPayment = (billNo: string) => {
@@ -347,6 +399,7 @@ export default function App() {
             setIsDownloadModalOpen(true);
           }}
           onOpenExportCenter={() => setIsExportCenterOpen(true)}
+          onOpenSyncPopup={() => setIsSyncPopupOpen(true)}
           pendingCount={pendingCount}
         />
       </div>
@@ -360,6 +413,7 @@ export default function App() {
           onSync={handleForceSync}
           onOpenSheetsModal={() => setIsSheetsModalOpen(true)}
           onOpenExportCenter={() => setIsExportCenterOpen(true)}
+          onOpenSyncPopup={() => setIsSyncPopupOpen(true)}
         />
 
         {/* Content Container */}
@@ -380,6 +434,7 @@ export default function App() {
                   onSelectInvoice={(inv) => setSelectedInvoice(inv)}
                   onOpenSheetsModal={() => setIsSheetsModalOpen(true)}
                   onOpenExportCenter={() => setIsExportCenterOpen(true)}
+                  onOpenSyncPopup={() => setIsSyncPopupOpen(true)}
                   isConnected={sheetsConfig.isConnected}
                 />
               )}
@@ -529,6 +584,18 @@ export default function App() {
         onSaveConfig={handleSaveSheetsConfig}
         onForceSync={handleForceSync}
         isSyncing={isSyncing}
+      />
+
+      {/* Sync Data on Open Popup */}
+      <SyncDataPopup
+        isOpen={isSyncPopupOpen}
+        onClose={() => setIsSyncPopupOpen(false)}
+        sheetsConfig={sheetsConfig}
+        invoicesCount={invoices.length}
+        rootsCount={roots.length}
+        onSync={handleForceSync}
+        isSyncing={isSyncing}
+        onOpenSheetsModal={() => setIsSheetsModalOpen(true)}
       />
     </div>
   );

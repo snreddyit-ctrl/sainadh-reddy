@@ -11,6 +11,7 @@ import {
   MapPin,
   Calendar,
   Download,
+  RefreshCw,
 } from 'lucide-react';
 import { ActiveScreen, DashboardSummary, Invoice } from '../types';
 import { formatCurrency, formatDate } from '../utils/format';
@@ -22,6 +23,7 @@ interface HomeScreenProps {
   onSelectInvoice: (invoice: Invoice) => void;
   onOpenSheetsModal: () => void;
   onOpenExportCenter?: () => void;
+  onOpenSyncPopup?: () => void;
   isConnected: boolean;
 }
 
@@ -32,6 +34,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSelectInvoice,
   onOpenSheetsModal,
   onOpenExportCenter,
+  onOpenSyncPopup,
   isConnected,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -297,6 +300,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               >
                 <Download className="w-4 h-4 text-blue-600" />
                 <span>Export & Download Files</span>
+              </button>
+            )}
+
+            {onOpenSyncPopup && (
+              <button
+                type="button"
+                id="home-sync-popup-btn"
+                onClick={onOpenSyncPopup}
+                className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2.5 px-3 rounded-xl border border-slate-200 shadow-2xs transition-all active:scale-95 text-xs flex items-center justify-center gap-2 uppercase tracking-wide"
+              >
+                <RefreshCw className="w-4 h-4 text-blue-600" />
+                <span>Sync Data with Google Sheets</span>
               </button>
             )}
 

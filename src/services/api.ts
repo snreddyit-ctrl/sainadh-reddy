@@ -190,4 +190,126 @@ export const api = {
       return { success: false, message: err.message || 'Sync failed' };
     }
   },
+
+  // ----------------------------------------------------
+  // AUTH METHODS
+  // ----------------------------------------------------
+
+  async checkAuthStatus(token?: string | null): Promise<{ isAuthenticated: boolean; user?: any }> {
+    try {
+      const headers: Record<string, string> = { ...noCacheHeaders };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/auth/status?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers,
+      });
+      const json = await res.json();
+      return {
+        isAuthenticated: Boolean(json.isAuthenticated),
+        user: json.user || null,
+      };
+    } catch (err) {
+      return { isAuthenticated: false, user: null };
+    }
+  },
+
+  async login(username: string, password: string): Promise<ApiResponse<{ token: string; user: any }>> {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
+        body: JSON.stringify({ username, password }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Login network error' };
+    }
+  },
+
+  async logout(token?: string | null): Promise<ApiResponse<void>> {
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json', ...noCacheHeaders };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ token }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Logout failed' };
+    }
+  },
+
+  async getSecurityQuestion(username: string): Promise<ApiResponse<{ securityQuestion: string }>> {
+    try {
+      const res = await fetch('/api/auth/reset-password/get-question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
+        body: JSON.stringify({ username }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        return { success: true, data: { securityQuestion: json.securityQuestion } };
+      }
+      return { success: false, message: json.message || 'User not found' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Network error' };
+    }
+  },
+
+  async verifyAndResetPassword(params: {
+    username: string;
+    method: 'security_question' | 'recovery_pin';
+    securityAnswer?: string;
+    recoveryPin?: string;
+    newPassword: string;
+  }): Promise<ApiResponse<{ token: string; user: any }>> {
+    try {
+      const res = await fetch('/api/auth/reset-password/verify-and-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
+        body: JSON.stringify(params),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Password reset failed' };
+    }
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse<void>> {
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Change password failed' };
+    }
+  },
+
+  async updateProfile(data: {
+    name?: string;
+    email?: string;
+    username?: string;
+    securityQuestion?: string;
+    securityAnswer?: string;
+    recoveryPin?: string;
+    currentPassword: string;
+  }): Promise<ApiResponse<{ user: any }>> {
+    try {
+      const res = await fetch('/api/auth/update-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
+        body: JSON.stringify(data),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Update profile failed' };
+    }
+  },
 };

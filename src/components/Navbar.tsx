@@ -8,6 +8,7 @@ interface NavbarProps {
   onSync: () => void;
   onOpenSheetsModal: () => void;
   onOpenExportCenter?: () => void;
+  onOpenSyncPopup?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -16,6 +17,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSync,
   onOpenSheetsModal,
   onOpenExportCenter,
+  onOpenSyncPopup,
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200 lg:hidden">
@@ -50,7 +52,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Sheets connection status badge */}
           <button
             onClick={onOpenSheetsModal}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
               sheetsConfig.isConnected
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                 : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -58,21 +60,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Google Sheets Settings"
           >
             <div
-              className={`h-1.5 w-1.5 rounded-full ${
+              className={`h-2 w-2 rounded-full ${
                 sheetsConfig.isConnected ? 'bg-green-500 animate-pulse' : 'bg-amber-500'
               }`}
             ></div>
-            <span className="hidden sm:inline">
+            <span>
               {sheetsConfig.isConnected ? 'Connected' : 'Configure'}
             </span>
           </button>
 
           {/* Sync Button */}
           <button
-            onClick={onSync}
+            onClick={onOpenSyncPopup || onSync}
             disabled={isSyncing}
             className="p-2 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors disabled:opacity-50 flex items-center justify-center"
-            title="Sync data with Google Sheets"
+            title="Open Sync Data Popup"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-600' : ''}`} />
           </button>
@@ -81,3 +83,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

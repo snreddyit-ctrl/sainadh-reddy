@@ -55,6 +55,19 @@ export interface SheetsConfig {
   mode: 'connected' | 'local_fallback';
 }
 
+export interface UserProfile {
+  username: string;
+  name: string;
+  email: string;
+  securityQuestion?: string;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: UserProfile | null;
+  token: string | null;
+}
+
 export type ActiveScreen = 
   | 'home'
   | 'all_bills'

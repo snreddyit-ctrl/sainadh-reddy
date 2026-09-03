@@ -25,6 +25,7 @@ interface SidebarProps {
   onOpenManageRoots?: () => void;
   onOpenDownloadModal?: () => void;
   onOpenExportCenter?: () => void;
+  onOpenSyncPopup?: () => void;
   pendingCount: number;
 }
 
@@ -38,6 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenManageRoots,
   onOpenDownloadModal,
   onOpenExportCenter,
+  onOpenSyncPopup,
   pendingCount,
 }) => {
   const menuItems = [
@@ -159,15 +161,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={onSync}
+            onClick={onOpenSyncPopup || onSync}
             disabled={isSyncing}
             className="flex-1 py-1.5 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+            title="Open Sync Data Popup"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-600' : ''}`} />
-            <span>{isSyncing ? 'Syncing...' : 'Sync Sheet'}</span>
+            <span>{isSyncing ? 'Syncing...' : 'Sync Data'}</span>
           </button>
         </div>
       </div>
     </aside>
   );
 };
+
