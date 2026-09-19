@@ -141,11 +141,15 @@ export const api = {
     }
   },
 
-  async deleteRoot(rootName: string): Promise<ApiResponse<string[]>> {
+  async deleteRoot(
+    rootName: string,
+    options?: { reassignTo?: string; deleteInvoices?: boolean }
+  ): Promise<ApiResponse<string[]>> {
     try {
       const res = await fetch(`/api/roots/${encodeURIComponent(rootName)}`, {
         method: 'DELETE',
-        headers: noCacheHeaders,
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
+        body: JSON.stringify(options || {}),
       });
       return await res.json();
     } catch (err: any) {

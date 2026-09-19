@@ -1,0 +1,179 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based access information",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth user identifier"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Full name or display label"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "manager", "staff"],
+          "description": "Authorization level within Vijaya Agencies"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account registration timestamp"
+        }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Customer sales invoice record",
+      "type": "object",
+      "properties": {
+        "billNo": {
+          "type": "string",
+          "description": "Customer invoice or bill number"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of billing (YYYY-MM-DD)"
+        },
+        "root": {
+          "type": "string",
+          "description": "Distribution route / area"
+        },
+        "billAmount": {
+          "type": "number",
+          "description": "Total invoice billing amount"
+        },
+        "amountPaid": {
+          "type": "number",
+          "description": "Cumulative amount collected"
+        },
+        "amountPending": {
+          "type": "number",
+          "description": "Outstanding balance due"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Pending", "Partially Paid", "Paid"],
+          "description": "Payment collection status"
+        },
+        "paidDate": {
+          "type": "string",
+          "description": "Date when invoice was fully settled"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional memo or comments"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Record creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last updated timestamp"
+        },
+        "userId": {
+          "type": "string",
+          "description": "ID of user who created or last touched this invoice"
+        }
+      },
+      "required": ["billNo", "date", "root", "billAmount", "amountPending", "status"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Cash or digital collection receipt transaction",
+      "type": "object",
+      "properties": {
+        "billNo": {
+          "type": "string",
+          "description": "Associated invoice bill number"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount collected in this payment"
+        },
+        "paymentDate": {
+          "type": "string",
+          "description": "Date collection received (YYYY-MM-DD)"
+        },
+        "paymentMode": {
+          "type": "string",
+          "enum": ["Cash", "UPI", "Cheque", "Bank Transfer"],
+          "description": "Payment settlement channel"
+        },
+        "referenceNo": {
+          "type": "string",
+          "description": "UPI txn ID, cheque number, or bank ref"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Collector notes"
+        },
+        "root": {
+          "type": "string",
+          "description": "Distribution route at time of payment"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Transaction entry timestamp"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Collector or user who logged payment"
+        }
+      },
+      "required": ["billNo", "amount", "paymentDate", "paymentMode"]
+    },
+    "Root": {
+      "title": "Root",
+      "description": "Distribution delivery route",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Route name, e.g. Anantapur, Dharmavaram"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "User identifier who defined route"
+        }
+      },
+      "required": ["name"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents keyed by Firebase Auth UID"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Sales invoice collection for distribution accounts"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Payment ledger logs for all collections"
+    },
+    "/roots/{rootId}": {
+      "schema": "Root",
+      "description": "Master list of delivery routes"
+    }
+  }
+}

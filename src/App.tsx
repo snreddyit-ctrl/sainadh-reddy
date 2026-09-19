@@ -11,30 +11,28 @@ import { DashboardScreen } from './components/DashboardScreen';
 import { RootPendingScreen } from './components/RootPendingScreen';
 import { InvoiceDetailsModal } from './components/InvoiceDetailsModal';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
-import { GoogleSheetsModal } from './components/GoogleSheetsModal';
-import { ManageRootsModal } from './components/ManageRootsModal';
+import { ManageRootsModal, DeleteRootOptions } from './components/ManageRootsModal';
 import { DownloadPendingBillsModal } from './components/DownloadPendingBillsModal';
 import { ExportCenterModal } from './components/ExportCenterModal';
-import { SyncDataPopup } from './components/SyncDataPopup';
+import { FirebaseStatusModal } from './components/FirebaseStatusModal';
+import { UserApprovalsModal } from './components/UserApprovalsModal';
+import { AuthScreen } from './components/AuthScreen';
+import { AuthProvider, useAuth, MASTER_ADMIN_EMAIL } from './context/AuthContext';
+import { firestoreService, DEFAULT_ROOTS } from './services/firestoreService';
 import { api } from './services/api';
 import {
   ActiveScreen,
   DashboardSummary,
   Invoice,
   RootPendingSummary,
-  SheetsConfig,
 } from './types';
 
-export default function App() {
+function MainApp() {
+  const { currentUser, userProfile, loading: authLoading } = useAuth();
+
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>('home');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [roots, setRoots] = useState<string[]>(['Pattapuram', 'Hyderabad', 'Vijayawada']);
-  const [sheetsConfig, setSheetsConfig] = useState<SheetsConfig>({
-    appsScriptUrl: '',
-    isConnected: false,
-    lastSynced: null,
-    mode: 'local_fallback',
-  });
+  const [roots, setRoots] = useState<string[]>(DEFAULT_ROOTS);
 
   // Loading & Sync States
   const [isLoading, setIsLoading] = useState(true);
@@ -45,97 +43,100 @@ export default function App() {
   const [paymentInitialBillNo, setPaymentInitialBillNo] = useState<string>('');
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
+  const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false);
   const [isRootsModalOpen, setIsRootsModalOpen] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [downloadModalRoot, setDownloadModalRoot] = useState<string>('All');
   const [isExportCenterOpen, setIsExportCenterOpen] = useState(false);
-  const [isSyncPopupOpen, setIsSyncPopupOpen] = useState(true);
+  const [isApprovalsModalOpen, setIsApprovalsModalOpen] = useState(false);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
-  // Fetch fresh data from database
-  const fetchData = async (showLoadingSpinner = false) => {
+  const isAdmin = userProfile?.role === 'admin' || (currentUser?.email || '').toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+
+  // Fetch / Sync data from Firebase Firestore
+  const fetchFirestoreData = async (showLoadingSpinner = false) => {
     if (showLoadingSpinner) setIsLoading(true);
     try {
-      const [invData, rootsData, configData] = await Promise.all([
-        api.getInvoices(),
-        api.getRoots(),
-        api.getSheetsConfig(),
+      // 1. Fetch current invoices and roots from Firestore
+      const [firestoreInvoices, firestoreRoots] = await Promise.all([
+        firestoreService.getInvoices(),
+        firestoreService.getRoots(),
       ]);
 
-      setInvoices(invData.invoices);
-      setRoots(rootsData);
-      setSheetsConfig(configData);
+      // If Firestore is empty on initial migration, seed existing invoices and roots
+      if (firestoreInvoices.length === 0) {
+        try {
+          const localFallback = await api.getInvoices();
+          const localRoots = await api.getRoots();
+          if (localFallback.invoices && localFallback.invoices.length > 0) {
+            await firestoreService.syncInitialDataIfEmpty(localFallback.invoices, localRoots);
+            const reloadedInvoices = await firestoreService.getInvoices();
+            const reloadedRoots = await firestoreService.getRoots();
+            setInvoices(reloadedInvoices);
+            setRoots(reloadedRoots.length > 0 ? reloadedRoots : DEFAULT_ROOTS);
+            return;
+          }
+        } catch (seedErr) {
+          console.warn('Initial seeding fallback warning:', seedErr);
+        }
+      }
+
+      setInvoices(firestoreInvoices);
+      // Ensure all roots from invoices are registered into Firestore roots collection
+      const syncedRoots = await firestoreService.syncInvoiceRootsToCollection(firestoreInvoices);
+      setRoots(syncedRoots.length > 0 ? syncedRoots : firestoreRoots);
     } catch (err) {
-      console.error('Error fetching app data:', err);
+      console.error('Error fetching Firestore data:', err);
     } finally {
       if (showLoadingSpinner) setIsLoading(false);
     }
   };
 
+  // Setup Real-time Firestore Subscription & Initial Fetch
   useEffect(() => {
-    // Initial fetch with loader
-    fetchData(true);
+    if (!currentUser) return;
 
-    // Auto-refresh when user opens tab, focuses window or navigates back
-    const handleFocus = () => {
-      fetchData(false);
-    };
+    fetchFirestoreData(true);
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchData(false);
+    // Subscribe to live invoice updates in Firestore
+    const unsubscribe = firestoreService.subscribeInvoices((liveInvoices) => {
+      if (liveInvoices.length > 0 || invoices.length > 0) {
+        setInvoices(liveInvoices);
       }
-    };
+    });
 
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('pageshow', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    // Subscribe to live roots updates in Firestore
+    const unsubscribeRoots = firestoreService.subscribeRoots((liveRoots) => {
+      setRoots(liveRoots);
+    });
 
-    // Background interval auto-refresh every 20 seconds
-    const intervalId = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        fetchData(false);
-      }
-    }, 20000);
+    // Subscribe to pending approvals count for admin
+    let unsubscribeUsers = () => {};
+    if (isAdmin) {
+      unsubscribeUsers = firestoreService.subscribeUsers((usersList) => {
+        const pending = usersList.filter((u) => {
+          const isMaster = (u.email || '').toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+          return !isMaster && (u.approvalStatus === 'pending' || u.isApproved === false);
+        });
+        setPendingApprovalsCount(pending.length);
+      });
+    }
 
     return () => {
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('pageshow', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearInterval(intervalId);
+      unsubscribe();
+      unsubscribeRoots();
+      unsubscribeUsers();
     };
-  }, []);
+  }, [currentUser, isAdmin]);
 
-  // Force Google Sheet Sync
-  const handleForceSync = async (): Promise<{ success: boolean; message?: string }> => {
+  // Refresh Firestore
+  const handleForceSync = async () => {
     setIsSyncing(true);
-    try {
-      const res = await api.forceSync();
-      await fetchData();
-      return res;
-    } catch (err: any) {
-      console.error('Sync failed:', err);
-      return { success: false, message: err?.message || 'Sync failed' };
-    } finally {
-      setIsSyncing(false);
-    }
+    await fetchFirestoreData(false);
+    setIsSyncing(false);
   };
 
-  // Save Sheets Configuration
-  const handleSaveSheetsConfig = async (appsScriptUrl: string) => {
-    try {
-      const res = await api.updateSheetsConfig(appsScriptUrl);
-      if (res.success && res.data) {
-        setSheetsConfig(res.data);
-      }
-      await fetchData();
-    } catch (err) {
-      console.error('Failed to save sheets configuration:', err);
-      throw err;
-    }
-  };
-
-  // Add / Create Invoice
+  // Add / Create Invoice in Firestore
   const handleSaveInvoice = async (invoiceData: {
     billNo: string;
     root: string;
@@ -144,28 +145,32 @@ export default function App() {
     amountPaid: number;
   }): Promise<{ success: boolean; message?: string }> => {
     try {
-      const res = await api.addInvoice(invoiceData);
+      const res = await firestoreService.addInvoice({
+        ...invoiceData,
+        userId: currentUser?.uid,
+      });
+
       if (res.success) {
-        await fetchData();
+        await fetchFirestoreData(false);
         setActiveScreen('all_bills');
         return { success: true };
       }
-      return { success: false, message: res.message || 'Failed to save invoice' };
+      return { success: false, message: res.message || 'Failed to save invoice to Firebase' };
     } catch (err: any) {
       console.error('Failed to save invoice:', err);
       return { success: false, message: err.message || 'Error occurred while saving invoice' };
     }
   };
 
-  // Record / Add Payment
+  // Record Payment in Firestore
   const handleRecordPayment = async (
     billNo: string,
     currentPayment: number
   ): Promise<{ success: boolean; message?: string }> => {
     try {
-      const res = await api.addPayment(billNo, currentPayment);
+      const res = await firestoreService.addPayment(billNo, currentPayment, currentUser?.uid);
       if (res.success) {
-        await fetchData();
+        await fetchFirestoreData(false);
         return { success: true };
       }
       return { success: false, message: res.message || 'Failed to record payment' };
@@ -175,15 +180,15 @@ export default function App() {
     }
   };
 
-  // Update existing invoice
+  // Update existing invoice in Firestore
   const handleUpdateInvoice = async (billNo: string, data: Partial<Invoice>): Promise<boolean> => {
     try {
-      const res = await api.updateInvoice(billNo, data);
+      const res = await firestoreService.updateInvoice(billNo, data);
       if (res.success && res.data) {
         const updated = res.data;
         setInvoices((prev) => prev.map((inv) => (inv.billNo === updated.billNo ? updated : inv)));
         setSelectedInvoice(updated);
-        await fetchData();
+        await fetchFirestoreData(false);
         return true;
       }
       return false;
@@ -193,19 +198,19 @@ export default function App() {
     }
   };
 
-  // Delete invoice handler
+  // Delete invoice in Firestore
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      const res = await api.deleteInvoice(deleteTarget.billNo);
+      const res = await firestoreService.deleteInvoice(deleteTarget.billNo);
       if (res.success) {
         setInvoices((prev) => prev.filter((inv) => inv.billNo !== deleteTarget.billNo));
         setSelectedInvoice(null);
         setDeleteTarget(null);
-        await fetchData();
+        await fetchFirestoreData(false);
       } else {
-        alert(res.message || 'Failed to delete invoice');
+        alert(res.message || 'Failed to delete invoice from Firebase');
       }
     } catch (err) {
       console.error('Failed to delete invoice:', err);
@@ -215,20 +220,20 @@ export default function App() {
     }
   };
 
-  // Bulk delete paid bills
+  // Bulk delete paid bills in Firestore
   const handleBulkDeleteInvoices = async (
     billNumbers: string[]
   ): Promise<{ success: boolean; count: number; message?: string }> => {
     if (!billNumbers.length) return { success: true, count: 0 };
     try {
-      const res = await api.bulkDeleteInvoices(billNumbers);
+      const res = await firestoreService.bulkDeleteInvoices(billNumbers);
       if (res.success) {
         setInvoices((prev) => prev.filter((inv) => !billNumbers.includes(inv.billNo)));
         if (selectedInvoice && billNumbers.includes(selectedInvoice.billNo)) {
           setSelectedInvoice(null);
         }
-        await fetchData();
-        return { success: true, count: res.data?.deletedCount || billNumbers.length };
+        await fetchFirestoreData(false);
+        return { success: true, count: res.count };
       }
       return { success: false, count: 0, message: res.message || 'Failed to delete paid bills' };
     } catch (err: any) {
@@ -237,10 +242,10 @@ export default function App() {
     }
   };
 
-  // Root management
+  // Root management in Firestore
   const handleAddNewRoot = async (newRoot: string): Promise<boolean> => {
     try {
-      const res = await api.addRoot(newRoot);
+      const res = await firestoreService.addRoot(newRoot);
       if (res.success && res.data) {
         setRoots(res.data);
         return true;
@@ -254,10 +259,10 @@ export default function App() {
 
   const handleUpdateRoot = async (oldName: string, newName: string): Promise<boolean> => {
     try {
-      const res = await api.updateRoot(oldName, newName);
+      const res = await firestoreService.updateRoot(oldName, newName);
       if (res.success && res.data) {
         setRoots(res.data.roots);
-        await fetchData();
+        await fetchFirestoreData(false);
         return true;
       }
       return false;
@@ -267,17 +272,36 @@ export default function App() {
     }
   };
 
-  const handleDeleteRoot = async (rootName: string): Promise<boolean> => {
+  const handleDeleteRoot = async (
+    rootName: string,
+    options?: DeleteRootOptions
+  ): Promise<boolean> => {
     try {
-      const res = await api.deleteRoot(rootName);
+      const res = await firestoreService.deleteRoot(rootName, options);
       if (res.success && res.data) {
         setRoots(res.data);
-        await fetchData();
+        api.deleteRoot(rootName, options).catch((e) => console.warn('Server deleteRoot sync:', e));
+        await fetchFirestoreData(false);
         return true;
       }
       return false;
     } catch (err) {
       console.error('Failed to delete root:', err);
+      return false;
+    }
+  };
+
+  const handleDeleteUnusedRoots = async (): Promise<boolean> => {
+    try {
+      const res = await firestoreService.deleteUnusedRoots(invoices);
+      if (res.success && res.data) {
+        setRoots(res.data);
+        await fetchFirestoreData(false);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to delete unused roots:', err);
       return false;
     }
   };
@@ -376,9 +400,26 @@ export default function App() {
 
   const pendingCount = dashboardSummary.pendingBillsCount + dashboardSummary.partPaidBillsCount;
 
+  // 1. Auth Loading state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm font-semibold text-slate-300">Initializing Firebase Authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated state -> Show Firebase Login & Registration Screen
+  if (!currentUser) {
+    return <AuthScreen />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex antialiased">
-      {/* Desktop Sidebar */}
+      {/* Desktop Navigation Sidebar */}
       <div className="hidden lg:block">
         <Sidebar
           activeScreen={activeScreen}
@@ -389,40 +430,39 @@ export default function App() {
             setActiveScreen(screen);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          sheetsConfig={sheetsConfig}
           isSyncing={isSyncing}
           onSync={handleForceSync}
-          onOpenSheetsModal={() => setIsSheetsModalOpen(true)}
+          onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
           onOpenManageRoots={() => setIsRootsModalOpen(true)}
           onOpenDownloadModal={() => {
             setDownloadModalRoot('All');
             setIsDownloadModalOpen(true);
           }}
           onOpenExportCenter={() => setIsExportCenterOpen(true)}
-          onOpenSyncPopup={() => setIsSyncPopupOpen(true)}
+          onOpenApprovalsModal={() => setIsApprovalsModalOpen(true)}
+          pendingApprovalsCount={pendingApprovalsCount}
           pendingCount={pendingCount}
         />
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        {/* Mobile Top Navbar */}
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-8">
+        {/* Mobile Header */}
         <Navbar
-          sheetsConfig={sheetsConfig}
           isSyncing={isSyncing}
           onSync={handleForceSync}
-          onOpenSheetsModal={() => setIsSheetsModalOpen(true)}
+          onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
           onOpenExportCenter={() => setIsExportCenterOpen(true)}
-          onOpenSyncPopup={() => setIsSyncPopupOpen(true)}
+          onOpenApprovalsModal={() => setIsApprovalsModalOpen(true)}
+          pendingApprovalsCount={pendingApprovalsCount}
         />
 
-        {/* Content Container */}
-        <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 mb-16 lg:mb-6">
-          {isLoading ? (
-            <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-3">
+        {/* Dynamic Screen View */}
+        <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+          {isLoading && invoices.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 space-y-3">
               <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-              <div className="text-sm font-semibold text-slate-700">Loading VIJAYA AGENCIES...</div>
-              <div className="text-xs text-slate-400">Connecting Google Sheets database</div>
+              <p className="text-sm font-semibold text-slate-500">Connecting to Firebase Cloud Firestore...</p>
             </div>
           ) : (
             <>
@@ -432,10 +472,13 @@ export default function App() {
                   recentInvoices={invoices}
                   onNavigate={(screen) => setActiveScreen(screen)}
                   onSelectInvoice={(inv) => setSelectedInvoice(inv)}
-                  onOpenSheetsModal={() => setIsSheetsModalOpen(true)}
+                  onQuickPayment={handleQuickPayment}
+                  onOpenDownloadModal={(r) => {
+                    setDownloadModalRoot(r || 'All');
+                    setIsDownloadModalOpen(true);
+                  }}
                   onOpenExportCenter={() => setIsExportCenterOpen(true)}
-                  onOpenSyncPopup={() => setIsSyncPopupOpen(true)}
-                  isConnected={sheetsConfig.isConnected}
+                  onOpenManageRoots={() => setIsRootsModalOpen(true)}
                 />
               )}
 
@@ -445,8 +488,7 @@ export default function App() {
                   roots={roots}
                   onSelectInvoice={(inv) => setSelectedInvoice(inv)}
                   onQuickPayment={handleQuickPayment}
-                  onNavigateToAddInvoice={() => setActiveScreen('add_invoice')}
-                  onBulkDeletePaid={handleBulkDeleteInvoices}
+                  onBulkDelete={handleBulkDeleteInvoices}
                   onOpenDownloadModal={(r) => {
                     setDownloadModalRoot(r || 'All');
                     setIsDownloadModalOpen(true);
@@ -541,14 +583,14 @@ export default function App() {
       <DeleteConfirmDialog
         isOpen={Boolean(deleteTarget)}
         title="Delete Invoice Confirmation"
-        message="Are you sure you want to delete this invoice?"
+        message="Are you sure you want to delete this invoice from Firebase?"
         billNo={deleteTarget?.billNo}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteTarget(null)}
         isDeleting={isDeleting}
       />
 
-      {/* Manage Roots Modal (Add Details & Delete Roots) */}
+      {/* Manage Roots Modal */}
       <ManageRootsModal
         isOpen={isRootsModalOpen}
         onClose={() => setIsRootsModalOpen(false)}
@@ -557,6 +599,7 @@ export default function App() {
         onAddNewRoot={handleAddNewRoot}
         onUpdateRoot={handleUpdateRoot}
         onDeleteRoot={handleDeleteRoot}
+        onDeleteUnusedRoots={handleDeleteUnusedRoots}
       />
 
       {/* Download Root-Wise Pending Bills Modal */}
@@ -576,27 +619,33 @@ export default function App() {
         roots={roots}
       />
 
-      {/* Google Sheets Connection Modal */}
-      <GoogleSheetsModal
-        isOpen={isSheetsModalOpen}
-        onClose={() => setIsSheetsModalOpen(false)}
-        config={sheetsConfig}
-        onSaveConfig={handleSaveSheetsConfig}
-        onForceSync={handleForceSync}
-        isSyncing={isSyncing}
+      {/* Firebase Cloud Database Status Modal */}
+      <FirebaseStatusModal
+        isOpen={isFirebaseModalOpen}
+        onClose={() => setIsFirebaseModalOpen(false)}
+        totalInvoices={invoices.length}
+        totalRoots={roots.length}
+        onRefresh={handleForceSync}
       />
 
-      {/* Sync Data on Open Popup */}
-      <SyncDataPopup
-        isOpen={isSyncPopupOpen}
-        onClose={() => setIsSyncPopupOpen(false)}
-        sheetsConfig={sheetsConfig}
-        invoicesCount={invoices.length}
-        rootsCount={roots.length}
-        onSync={handleForceSync}
-        isSyncing={isSyncing}
-        onOpenSheetsModal={() => setIsSheetsModalOpen(true)}
+      {/* Admin User Approvals Modal */}
+      <UserApprovalsModal
+        isOpen={isApprovalsModalOpen}
+        onClose={() => setIsApprovalsModalOpen(false)}
+        pendingCount={pendingApprovalsCount}
+        onRefreshPendingCount={async () => {
+          const list = await firestoreService.getPendingApprovals();
+          setPendingApprovalsCount(list.length);
+        }}
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 }

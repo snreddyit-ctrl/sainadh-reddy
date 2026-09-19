@@ -14,6 +14,11 @@ import {
 import { Invoice } from '../types';
 import { formatCurrency } from '../utils/format';
 
+export interface DeleteRootOptions {
+  reassignTo?: string;
+  deleteInvoices?: boolean;
+}
+
 interface ManageRootsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -21,7 +26,8 @@ interface ManageRootsModalProps {
   invoices: Invoice[];
   onAddNewRoot: (rootName: string) => Promise<boolean>;
   onUpdateRoot: (oldRootName: string, newRootName: string) => Promise<boolean>;
-  onDeleteRoot: (rootName: string) => Promise<boolean>;
+  onDeleteRoot: (rootName: string, options?: DeleteRootOptions) => Promise<boolean>;
+  onDeleteUnusedRoots?: () => Promise<boolean>;
 }
 
 export const ManageRootsModal: React.FC<ManageRootsModalProps> = ({
@@ -32,17 +38,42 @@ export const ManageRootsModal: React.FC<ManageRootsModalProps> = ({
   onAddNewRoot,
   onUpdateRoot,
   onDeleteRoot,
+  onDeleteUnusedRoots,
 }) => {
   const [newRootName, setNewRootName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [editingRoot, setEditingRoot] = useState<string | null>(null);
   const [editedName, setEditedName] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Deletion states
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteAction, setDeleteAction] = useState<'reassign' | 'deleteBills' | 'unassign'>('reassign');
+  const [reassignTargetRoot, setReassignTargetRoot] = useState<string>('');
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Bulk unused roots clean up
+  const [isCleaningUnused, setIsCleaningUnused] = useState(false);
+  const [confirmCleanUnused, setConfirmCleanUnused] = useState(false);
+
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   if (!isOpen) return null;
+
+  // Compute unused routes (0 invoices attached)
+  const unusedRoots = roots.filter((r) => {
+    const count = invoices.filter((i) => (i.root || '').trim().toLowerCase() === r.toLowerCase()).length;
+    return count === 0;
+  });
+
+  // Open delete dialog and setup defaults
+  const openDeleteDialog = (rootName: string) => {
+    setDeleteTarget(rootName);
+    const otherRoots = roots.filter((r) => r.toLowerCase() !== rootName.toLowerCase());
+    setReassignTargetRoot(otherRoots.length > 0 ? otherRoots[0] : 'Unassigned');
+    setDeleteAction('reassign');
+    setFeedback(null);
+  };
 
   // Add new root
   const handleAddSubmit = async (e: React.FormEvent) => {
@@ -112,23 +143,67 @@ export const ManageRootsModal: React.FC<ManageRootsModalProps> = ({
     }
   };
 
-  // Confirm delete root
+  // Confirm delete root with invoice handling
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     setFeedback(null);
     try {
-      const ok = await onDeleteRoot(deleteTarget);
+      const targetBills = invoices.filter(
+        (i) => (i.root || '').trim().toLowerCase() === deleteTarget.toLowerCase()
+      );
+
+      let options: DeleteRootOptions | undefined = undefined;
+      if (targetBills.length > 0) {
+        if (deleteAction === 'deleteBills') {
+          options = { deleteInvoices: true };
+        } else if (deleteAction === 'reassign') {
+          options = { reassignTo: reassignTargetRoot || 'Unassigned' };
+        } else {
+          options = { reassignTo: 'Unassigned' };
+        }
+      }
+
+      const ok = await onDeleteRoot(deleteTarget, options);
       if (ok) {
-        setFeedback({ type: 'success', message: `Root "${deleteTarget}" deleted successfully.` });
+        setFeedback({
+          type: 'success',
+          message: `Route "${deleteTarget}" deleted successfully.${
+            targetBills.length > 0
+              ? deleteAction === 'deleteBills'
+                ? ` Associated ${targetBills.length} bills were permanently deleted.`
+                : ` Bills were reassigned to "${deleteAction === 'reassign' ? reassignTargetRoot : 'Unassigned'}".`
+              : ''
+          }`,
+        });
         setDeleteTarget(null);
       } else {
-        setFeedback({ type: 'error', message: `Failed to delete root "${deleteTarget}".` });
+        setFeedback({ type: 'error', message: `Failed to delete route "${deleteTarget}".` });
       }
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Error deleting root.' });
+      setFeedback({ type: 'error', message: err.message || 'Error deleting route.' });
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Bulk remove unused routes
+  const handleCleanUnused = async () => {
+    if (!onDeleteUnusedRoots) return;
+    setIsCleaningUnused(true);
+    setFeedback(null);
+    try {
+      const ok = await onDeleteUnusedRoots();
+      if (ok) {
+        setFeedback({ type: 'success', message: `Removed unused routes with 0 bills successfully!` });
+        setConfirmCleanUnused(false);
+      } else {
+        setFeedback({ type: 'error', message: 'Failed to clean unused routes.' });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message || 'Error cleaning unused routes.' });
+    } finally {
+      setIsCleaningUnused(false);
     }
   };
 
@@ -200,8 +275,18 @@ export const ManageRootsModal: React.FC<ManageRootsModalProps> = ({
           {/* Registered Roots List with Detailed Stats */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-slate-500 font-bold uppercase text-[11px] px-1">
-              <span>Registered Roots ({roots.length})</span>
-              <span>Invoice Breakdown</span>
+              <span>Registered Routes ({roots.length})</span>
+              {unusedRoots.length > 0 && onDeleteUnusedRoots && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmCleanUnused(true)}
+                  className="text-amber-600 hover:text-amber-700 hover:underline flex items-center gap-1 font-bold normal-case text-[11px]"
+                  title="Remove all routes that have 0 invoices"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Clean Up {unusedRoots.length} Unused {unusedRoots.length === 1 ? 'Route' : 'Routes'}</span>
+                </button>
+              )}
             </div>
 
             {roots.length === 0 ? (
@@ -211,7 +296,7 @@ export const ManageRootsModal: React.FC<ManageRootsModalProps> = ({
             ) : (
               <div className="space-y-2">
                 {roots.map((rootName) => {
-                  const rootInvoices = invoices.filter((i) => i.root.toLowerCase() === rootName.toLowerCase());
+                  const rootInvoices = invoices.filter((i) => (i.root || '').trim().toLowerCase() === rootName.toLowerCase());
                   const totalBilled = rootInvoices.reduce((sum, i) => sum + (Number(i.billAmount) || 0), 0);
                   const totalPaid = rootInvoices.reduce((sum, i) => sum + (Number(i.amountPaid) || 0), 0);
                   const totalPending = rootInvoices.reduce((sum, i) => sum + (Number(i.amountPending) || 0), 0);
@@ -284,7 +369,7 @@ export const ManageRootsModal: React.FC<ManageRootsModalProps> = ({
                             </button>
                             <button
                               type="button"
-                              onClick={() => setDeleteTarget(rootName)}
+                              onClick={() => openDeleteDialog(rootName)}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                               title={`Delete ${rootName}`}
                             >
@@ -323,29 +408,123 @@ export const ManageRootsModal: React.FC<ManageRootsModalProps> = ({
       {/* Delete Root Confirmation Dialog */}
       {deleteTarget && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-slate-200 p-5 space-y-4 animate-scaleUp">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-5 space-y-4 animate-scaleUp">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100">
-                <AlertTriangle className="w-5 h-5" />
+                <Trash2 className="w-5 h-5" />
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <h4 className="font-bold text-slate-900 text-base">Delete Route: {deleteTarget}</h4>
-                <p className="text-xs text-slate-500 mt-1">
-                  Are you sure you want to remove <strong>{deleteTarget}</strong> from your active distribution routes?
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Confirm the deletion of this route from your distribution list.
                 </p>
               </div>
             </div>
 
-            {invoices.filter((i) => i.root.toLowerCase() === deleteTarget.toLowerCase()).length > 0 && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 font-medium space-y-1">
-                <p className="font-bold">Notice:</p>
-                <p>
-                  This route has {invoices.filter((i) => i.root.toLowerCase() === deleteTarget.toLowerCase()).length} existing invoices. Existing bill records will be preserved in history.
-                </p>
-              </div>
-            )}
+            {(() => {
+              const targetBills = invoices.filter(
+                (i) => (i.root || '').trim().toLowerCase() === deleteTarget.toLowerCase()
+              );
+              const targetPending = targetBills.reduce((s, b) => s + (b.amountPending || 0), 0);
+              const otherRoots = roots.filter((r) => r.toLowerCase() !== deleteTarget.toLowerCase());
 
-            <div className="flex items-center justify-end gap-2 pt-1">
+              if (targetBills.length === 0) {
+                return (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-1">
+                    <p className="font-semibold text-slate-800">No active invoices on this route</p>
+                    <p>This route has 0 bills. It will be permanently removed from your active routes list.</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-3">
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-950 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>{targetBills.length} existing bills on this route</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800">
+                      Total pending balance:{' '}
+                      <strong className="font-mono text-amber-950">{formatCurrency(targetPending)}</strong>
+                    </p>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <label className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider">
+                      How would you like to handle these {targetBills.length} bills?
+                    </label>
+
+                    {/* Option 1: Reassign */}
+                    <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+                      <input
+                        type="radio"
+                        name="deleteAction"
+                        checked={deleteAction === 'reassign'}
+                        onChange={() => setDeleteAction('reassign')}
+                        className="mt-0.5 text-blue-600"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="font-bold text-slate-800 text-xs block">Reassign bills to another route</span>
+                        <span className="text-[11px] text-slate-500 block mb-1.5">
+                          Move all {targetBills.length} bills to an existing active route.
+                        </span>
+                        {deleteAction === 'reassign' && (
+                          <select
+                            value={reassignTargetRoot}
+                            onChange={(e) => setReassignTargetRoot(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          >
+                            {otherRoots.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                            <option value="Unassigned">Unassigned (General)</option>
+                          </select>
+                        )}
+                      </div>
+                    </label>
+
+                    {/* Option 2: Unassign */}
+                    <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+                      <input
+                        type="radio"
+                        name="deleteAction"
+                        checked={deleteAction === 'unassign'}
+                        onChange={() => setDeleteAction('unassign')}
+                        className="mt-0.5 text-blue-600"
+                      />
+                      <div className="flex-1">
+                        <span className="font-bold text-slate-800 text-xs block">Mark bills as "Unassigned"</span>
+                        <span className="text-[11px] text-slate-500">
+                          Keep all bills in history with route set to Unassigned.
+                        </span>
+                      </div>
+                    </label>
+
+                    {/* Option 3: Permanently delete bills */}
+                    <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-red-200 bg-red-50/40 hover:bg-red-50 cursor-pointer transition-colors">
+                      <input
+                        type="radio"
+                        name="deleteAction"
+                        checked={deleteAction === 'deleteBills'}
+                        onChange={() => setDeleteAction('deleteBills')}
+                        className="mt-0.5 text-red-600"
+                      />
+                      <div className="flex-1">
+                        <span className="font-bold text-red-800 text-xs block">Delete route and ALL {targetBills.length} bills</span>
+                        <span className="text-[11px] text-red-600">
+                          Permanently deletes these invoices and payment records. Cannot be undone.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
@@ -362,13 +541,72 @@ export const ManageRootsModal: React.FC<ManageRootsModalProps> = ({
               >
                 {isDeleting ? (
                   <>
-                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     <span>Deleting...</span>
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete Root</span>
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clean Up Unused Routes Confirmation Modal */}
+      {confirmCleanUnused && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-slate-200 p-5 space-y-4 animate-scaleUp">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-slate-900 text-base">Clean Up Unused Routes</h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Are you sure you want to remove all <strong>{unusedRoots.length} routes</strong> with 0 bills?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 max-h-36 overflow-y-auto space-y-1">
+              <span className="font-semibold text-slate-800 block text-[11px] uppercase">Routes to be removed:</span>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {unusedRoots.map((r) => (
+                  <span key={r} className="px-2 py-0.5 bg-white border border-slate-200 rounded-md text-[11px] font-medium text-slate-700">
+                    {r}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmCleanUnused(false)}
+                disabled={isCleaningUnused}
+                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCleanUnused}
+                disabled={isCleaningUnused}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase tracking-wider shadow-sm transition-all flex items-center gap-1.5"
+              >
+                {isCleaningUnused ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Cleaning...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove {unusedRoots.length} Routes</span>
                   </>
                 )}
               </button>

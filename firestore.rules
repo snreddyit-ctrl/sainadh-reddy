@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User profile and authentication records
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Account approval requests
+    match /user_approvals/{approvalId} {
+      allow read, write: if true;
+    }
+
+    // Invoices collection
+    match /invoices/{invoiceId} {
+      allow read, write: if true;
+    }
+
+    // Payments collection
+    match /payments/{paymentId} {
+      allow read, write: if true;
+    }
+
+    // Roots master collection
+    match /roots/{rootId} {
+      allow read, write: if true;
+    }
+  }
+}

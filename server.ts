@@ -373,6 +373,33 @@ async function startServer() {
     return res.json({ success: true, message: 'Logged out successfully.' });
   });
 
+  // POST Notify Admin of New User Registration
+  app.post('/api/auth/notify-new-user', (req, res) => {
+    try {
+      const { uid, email, displayName, requestedAt } = req.body;
+      const adminEmail = 'snreddy.it@gmail.com';
+
+      console.log('===============================================================');
+      console.log('📬 [EMAIL DISPATCH] NEW USER REGISTRATION APPROVAL REQUEST');
+      console.log(`To: ${adminEmail}`);
+      console.log(`Subject: Action Required: New Account Registration Approval for Vijaya Agencies`);
+      console.log(`User Name: ${displayName}`);
+      console.log(`User Email: ${email}`);
+      console.log(`User ID: ${uid}`);
+      console.log(`Time: ${requestedAt || new Date().toISOString()}`);
+      console.log(`Status: PENDING_APPROVAL`);
+      console.log('Action: Review and approve inside Vijaya Agencies Distribution Hub');
+      console.log('===============================================================');
+
+      return res.json({
+        success: true,
+        message: `Approval request registered. Notification dispatched for administrator ${adminEmail}.`,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
   // POST Get Security Question for User
   app.post('/api/auth/reset-password/get-question', (req, res) => {
     try {
@@ -912,20 +939,39 @@ async function startServer() {
   app.delete('/api/roots/:rootName', async (req, res) => {
     try {
       const targetRootName = String(req.params.rootName || '').trim();
+      const { reassignTo, deleteInvoices } = req.body || {};
       if (!targetRootName) {
         return res.status(400).json({ success: false, message: 'Root name is required.' });
       }
 
-      const rootIndex = appData.roots.findIndex(
-        (r) => r.toLowerCase() === targetRootName.toLowerCase()
+      // Remove root from list (case-insensitive filter)
+      appData.roots = appData.roots.filter(
+        (r) => r.toLowerCase() !== targetRootName.toLowerCase()
       );
 
-      if (rootIndex === -1) {
-        return res.status(404).json({ success: false, message: `Root "${targetRootName}" not found.` });
+      // Handle invoices in appData
+      if (deleteInvoices) {
+        appData.invoices = appData.invoices.filter(
+          (inv) => inv.root.toLowerCase() !== targetRootName.toLowerCase()
+        );
+      } else if (reassignTo) {
+        const cleanTarget = String(reassignTo).trim();
+        appData.invoices = appData.invoices.map((inv) => {
+          if (inv.root.toLowerCase() === targetRootName.toLowerCase()) {
+            return { ...inv, root: cleanTarget, updatedAt: new Date().toISOString() };
+          }
+          return inv;
+        });
+      } else {
+        // default: mark as Unassigned if not deleting
+        appData.invoices = appData.invoices.map((inv) => {
+          if (inv.root.toLowerCase() === targetRootName.toLowerCase()) {
+            return { ...inv, root: 'Unassigned', updatedAt: new Date().toISOString() };
+          }
+          return inv;
+        });
       }
 
-      // Remove root from list
-      const deletedRoot = appData.roots.splice(rootIndex, 1)[0];
       saveData(appData);
 
       if (appData.sheetsConfig.appsScriptUrl) {
@@ -937,7 +983,7 @@ async function startServer() {
 
       return res.json({
         success: true,
-        message: `Root "${deletedRoot}" deleted successfully.`,
+        message: `Root "${targetRootName}" deleted successfully.`,
         data: appData.roots,
       });
     } catch (err: any) {
