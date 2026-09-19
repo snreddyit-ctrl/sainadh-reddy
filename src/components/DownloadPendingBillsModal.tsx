@@ -218,7 +218,7 @@ export const DownloadPendingBillsModal: React.FC<DownloadPendingBillsModalProps>
                     {pendingInvoices.map((inv, idx) => {
                       const pf = getPFStatus(inv);
                       return (
-                        <tr key={inv.billNo} className="hover:bg-blue-50/40 transition-colors">
+                        <tr key={`${inv.billNo}-${idx}`} className="hover:bg-blue-50/40 transition-colors">
                           <td className="py-2.5 px-3 text-center font-medium text-slate-500">{idx + 1}</td>
                           {isAll && <td className="py-2.5 px-3 font-semibold text-slate-700">{inv.root}</td>}
                           <td className="py-2.5 px-3 text-center font-bold text-slate-900">{inv.billNo}</td>

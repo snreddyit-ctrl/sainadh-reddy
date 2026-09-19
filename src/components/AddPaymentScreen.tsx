@@ -257,8 +257,8 @@ export const AddPaymentScreen: React.FC<AddPaymentScreenProps> = ({
               required
             >
               <option value="">-- Choose an Invoice --</option>
-              {filteredInvoices.map((inv) => (
-                <option key={inv.billNo} value={inv.billNo}>
+              {filteredInvoices.map((inv, idx) => (
+                <option key={`${inv.billNo}-${idx}`} value={inv.billNo}>
                   #{inv.billNo} - {inv.root} (Pending: {formatCurrency(inv.amountPending)} - {inv.status})
                 </option>
               ))}

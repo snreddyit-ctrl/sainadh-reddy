@@ -181,9 +181,9 @@ export const PendingBillsScreen: React.FC<PendingBillsScreenProps> = ({
             <p className="text-xs text-slate-500">All matching customer invoices are settled.</p>
           </div>
         ) : (
-          filtered.map((invoice) => (
+          filtered.map((invoice, idx) => (
             <div
-              key={invoice.billNo}
+              key={`${invoice.billNo}-${idx}`}
               onClick={() => onSelectInvoice(invoice)}
               className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:border-slate-300 transition-all cursor-pointer space-y-3"
             >

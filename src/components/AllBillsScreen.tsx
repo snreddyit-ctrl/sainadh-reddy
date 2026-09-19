@@ -248,9 +248,9 @@ export const AllBillsScreen: React.FC<AllBillsScreenProps> = ({
                 </td>
               </tr>
             ) : (
-              sortedInvoices.map((inv) => (
+              sortedInvoices.map((inv, idx) => (
                 <tr
-                  key={inv.billNo}
+                  key={`${inv.billNo}-${idx}`}
                   onClick={() => onSelectInvoice(inv)}
                   className="hover:bg-slate-50 cursor-pointer transition-colors"
                 >
@@ -319,9 +319,9 @@ export const AllBillsScreen: React.FC<AllBillsScreenProps> = ({
             <p className="text-xs text-slate-400">Try adjusting your filters or search query.</p>
           </div>
         ) : (
-          sortedInvoices.map((invoice) => (
+          sortedInvoices.map((invoice, idx) => (
             <div
-              key={invoice.billNo}
+              key={`${invoice.billNo}-${idx}`}
               onClick={() => onSelectInvoice(invoice)}
               className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:border-slate-300 transition-all cursor-pointer space-y-3"
             >

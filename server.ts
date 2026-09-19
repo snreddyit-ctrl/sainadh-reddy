@@ -580,15 +580,6 @@ async function startServer() {
         });
       }
 
-      // 2. Check for duplicate Bill No
-      const exists = appData.invoices.some((inv) => inv.billNo === cleanBillNo);
-      if (exists) {
-        return res.status(409).json({
-          success: false,
-          message: 'This Bill No already exists.',
-        });
-      }
-
       const numBillAmount = Math.max(0, Number(billAmount) || 0);
       const numAmountPaid = Math.max(0, Number(amountPaid) || 0);
       

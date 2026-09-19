@@ -229,17 +229,6 @@ function addInvoice(data) {
     return jsonResponse({ success: false, message: "Bill No is required" });
   }
 
-  // Check for duplicate Bill No
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    const billNumbers = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-    for (let i = 0; i < billNumbers.length; i++) {
-      if (String(billNumbers[i][0]).trim() === billNo) {
-        return jsonResponse({ success: false, message: "This Bill No already exists." });
-      }
-    }
-  }
-
   const billAmount = Number(data.billAmount) || 0;
   const amountPaid = Number(data.amountPaid) || 0;
   const amountPending = Math.max(0, billAmount - amountPaid);

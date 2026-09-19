@@ -174,9 +174,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredRecent.slice(0, 7).map((inv) => (
+                  filteredRecent.slice(0, 7).map((inv, idx) => (
                     <tr
-                      key={inv.billNo}
+                      key={`${inv.billNo}-${idx}`}
                       onClick={() => onSelectInvoice(inv)}
                       className="hover:bg-slate-50 cursor-pointer transition-colors"
                     >
@@ -219,9 +219,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 No invoices found.
               </div>
             ) : (
-              filteredRecent.slice(0, 5).map((inv) => (
+              filteredRecent.slice(0, 5).map((inv, idx) => (
                 <div
-                  key={inv.billNo}
+                  key={`${inv.billNo}-${idx}`}
                   onClick={() => onSelectInvoice(inv)}
                   className="p-3.5 hover:bg-slate-50 active:bg-slate-100 cursor-pointer flex items-center justify-between"
                 >

@@ -227,7 +227,7 @@ export const RootPendingScreen: React.FC<RootPendingScreenProps> = ({
                     const pf = getPFStatus(inv);
                     return (
                       <tr
-                        key={inv.billNo}
+                        key={`${inv.billNo}-${idx}`}
                         onClick={() => onSelectInvoice(inv)}
                         className="hover:bg-blue-50/50 cursor-pointer transition-colors"
                       >
@@ -378,7 +378,7 @@ export const RootPendingScreen: React.FC<RootPendingScreenProps> = ({
                             const pf = getPFStatus(inv);
                             return (
                               <tr
-                                key={inv.billNo}
+                                key={`${inv.billNo}-${idx}`}
                                 onClick={() => onSelectInvoice(inv)}
                                 className="hover:bg-slate-50 cursor-pointer transition-colors"
                               >

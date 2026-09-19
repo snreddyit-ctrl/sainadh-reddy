@@ -53,10 +53,6 @@ export const AddInvoiceScreen: React.FC<AddInvoiceScreenProps> = ({
   const numAmountPaid = Math.max(0, parseFloat(amountPaid) || 0);
   const { amountPending, status } = calculateInvoiceCalculations(numBillAmount, numAmountPaid);
 
-  // Check if duplicate bill number entered in real-time
-  const cleanBillNo = billNo.trim();
-  const isDuplicate = cleanBillNo ? existingInvoices.some((inv) => inv.billNo === cleanBillNo) : false;
-
   // Handle Bill No input: numbers only
   const handleBillNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -101,19 +97,14 @@ export const AddInvoiceScreen: React.FC<AddInvoiceScreenProps> = ({
     setSuccessMessage(null);
 
     // 1. Validate Bill No
-    const billValidation = validateBillNumber(billNo);
+    const cleanBillNo = billNo.trim();
+    const billValidation = validateBillNumber(cleanBillNo);
     if (!billValidation.isValid) {
       setErrorMessage(billValidation.error || 'Invalid Bill No');
       return;
     }
 
-    // 2. Check for duplicate Bill No
-    if (isDuplicate) {
-      setErrorMessage('This Bill No already exists. Do not create a duplicate invoice.');
-      return;
-    }
-
-    // 3. Validate Root
+    // 2. Validate Root
     if (!root.trim()) {
       setErrorMessage('Please select a Root.');
       return;
@@ -210,14 +201,6 @@ export const AddInvoiceScreen: React.FC<AddInvoiceScreenProps> = ({
         </div>
       )}
 
-      {/* Duplicate warning */}
-      {isDuplicate && (
-        <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 flex items-center gap-2 text-xs font-semibold">
-          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span>Bill No #{cleanBillNo} already exists in database. Duplicate bill numbers not allowed.</span>
-        </div>
-      )}
-
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
           {/* 1. Bill No */}
@@ -233,11 +216,7 @@ export const AddInvoiceScreen: React.FC<AddInvoiceScreenProps> = ({
               value={billNo}
               onChange={handleBillNoChange}
               placeholder="e.g. 1006"
-              className={`w-full px-3 py-2.5 bg-slate-50 border rounded-lg text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 ${
-                isDuplicate
-                  ? 'border-red-400 focus:ring-red-100'
-                  : 'border-slate-200 focus:ring-blue-100 focus:border-blue-500'
-              }`}
+              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
               required
             />
           </div>
@@ -405,7 +384,7 @@ export const AddInvoiceScreen: React.FC<AddInvoiceScreenProps> = ({
         <button
           type="submit"
           id="save-invoice-btn"
-          disabled={isSubmitting || isDuplicate}
+          disabled={isSubmitting}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-blue-100 transition-all active:scale-95 uppercase tracking-wide text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? (

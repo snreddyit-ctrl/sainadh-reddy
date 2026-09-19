@@ -400,11 +400,11 @@ export const BulkDeletePaidModal: React.FC<BulkDeletePaidModalProps> = ({
                   No paid invoices match the selected date range and route.
                 </div>
               ) : (
-                matchingPaidInvoices.map((inv) => {
+                matchingPaidInvoices.map((inv, idx) => {
                   const isChecked = selectedBillNos.has(inv.billNo);
                   return (
                     <div
-                      key={inv.billNo}
+                      key={`${inv.billNo}-${idx}`}
                       onClick={() => handleToggleOne(inv.billNo)}
                       className={`px-3 py-2 flex items-center justify-between text-xs cursor-pointer hover:bg-slate-50 transition-colors ${
                         isChecked ? 'bg-red-50/30' : 'opacity-60'
