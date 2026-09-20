@@ -84,6 +84,11 @@ function doGet(e) {
       return jsonResponse({ success: true, message: "VIJAYA AGENCIES API connected successfully!" });
     }
 
+    if (action === "sendDailyInvoicesEmail" || action === "sendEmailReport") {
+      const recipientParam = (e && e.parameter && e.parameter.recipient) || "snreddy.it@gmail.com";
+      return sendDailyInvoicesEmailAt1130PM(recipientParam);
+    }
+
     return jsonResponse({ success: false, message: "Unknown action: " + action });
   } catch (err) {
     return jsonResponse({ success: false, message: err.toString() });
@@ -99,6 +104,11 @@ function doPost(e) {
     }
     
     const action = body.action;
+
+    if (action === "sendDailyInvoicesEmail" || action === "sendEmailReport") {
+      const recipientParam = body.recipient || "snreddy.it@gmail.com";
+      return sendDailyInvoicesEmailAt1130PM(recipientParam);
+    }
 
     if (action === "addInvoice") {
       return addInvoice(body.data);
@@ -490,5 +500,107 @@ function deleteRoot(rootName) {
 function jsonResponse(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * DAILY 11:30 PM AUTOMATIC EMAIL DISPATCH TO snreddy.it@gmail.com
+ * Sends all invoice details as an attached spreadsheet directly to your email inbox.
+ */
+function sendDailyInvoicesEmailAt1130PM(customRecipient) {
+  const recipient = (typeof customRecipient === "string" && customRecipient.indexOf("@") !== -1)
+    ? customRecipient.trim()
+    : "snreddy.it@gmail.com";
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const mainSheet = ss.getSheetByName(MAIN_SHEET_NAME);
+  if (!mainSheet) return jsonResponse({ success: false, message: "Main sheet not found" });
+
+  const lastRow = mainSheet.getLastRow();
+  const lastCol = mainSheet.getLastColumn();
+  if (lastRow <= 1) return jsonResponse({ success: false, message: "No invoice records found in sheet" });
+
+  const data = mainSheet.getRange(1, 1, lastRow, lastCol).getValues();
+
+  // 1. Build CSV Attachment
+  let csvContent = "";
+  for (let r = 0; r < data.length; r++) {
+    const row = data[r].map(function(cell) {
+      if (cell instanceof Date) {
+        return '"' + Utilities.formatDate(cell, "Asia/Kolkata", "yyyy-MM-dd") + '"';
+      }
+      return '"' + String(cell).replace(/"/g, '""') + '"';
+    });
+    csvContent += row.join(",") + "\\r\\n";
+  }
+
+  const dateStr = Utilities.formatDate(new Date(), "Asia/Kolkata", "yyyy-MM-dd");
+  const filename = "VIJAYA_AGENCIES_Invoices_" + dateStr + ".csv";
+  const attachmentBlob = Utilities.newBlob(csvContent, "text/csv", filename);
+
+  // Compute metrics
+  let totalBilled = 0;
+  let totalPaid = 0;
+  let totalPending = 0;
+  for (let i = 1; i < data.length; i++) {
+    totalBilled += Number(data[i][3]) || 0;
+    totalPaid += Number(data[i][4]) || 0;
+    totalPending += Number(data[i][5]) || 0;
+  }
+
+  const subject = "📊 VIJAYA AGENCIES - Daily Invoices Report (" + dateStr + " at 11:30 PM)";
+  const htmlBody = '<div style="font-family: Arial, sans-serif; max-width: 600px; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">' +
+    '<div style="background: #1e40af; color: #ffffff; padding: 20px; text-align: center;">' +
+    '<h2 style="margin: 0;">VIJAYA AGENCIES</h2>' +
+    '<p style="margin: 5px 0 0; font-size: 13px;">Daily Invoices Backup (11:30 PM)</p>' +
+    '</div>' +
+    '<div style="padding: 20px; background: #ffffff;">' +
+    '<p>Hello Administrator,</p>' +
+    '<p>Attached is your daily automatic spreadsheet backup containing all <strong>' + (data.length - 1) + '</strong> invoices as of 11:30 PM.</p>' +
+    '<div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #e2e8f0;">' +
+    '<p style="margin: 4px 0;"><strong>Total Invoices:</strong> ' + (data.length - 1) + '</p>' +
+    '<p style="margin: 4px 0;"><strong>Total Bill Value:</strong> Rs. ' + totalBilled.toLocaleString() + '</p>' +
+    '<p style="margin: 4px 0; color: #15803d;"><strong>Collected:</strong> Rs. ' + totalPaid.toLocaleString() + '</p>' +
+    '<p style="margin: 4px 0; color: #b91c1c;"><strong>Total Pending:</strong> Rs. ' + totalPending.toLocaleString() + '</p>' +
+    '</div>' +
+    '<p style="font-size: 12px; color: #64748b;">Attached: <strong>' + filename + '</strong></p>' +
+    '</div>' +
+    '</div>';
+
+  MailApp.sendEmail({
+    to: recipient,
+    subject: subject,
+    htmlBody: htmlBody,
+    attachments: [attachmentBlob]
+  });
+
+  return jsonResponse({
+    success: true,
+    message: "Daily report emailed successfully to " + recipient + " with " + (data.length - 1) + " invoices.",
+    recipient: recipient,
+    invoiceCount: data.length - 1,
+    filename: filename
+  });
+}
+
+/**
+ * SETUP FUNCTION: Run this function once in Google Apps Script editor
+ * to install the automatic 11:30 PM Daily Trigger.
+ */
+function setupMidnightEmailTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "sendDailyInvoicesEmailAt1130PM") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+
+  ScriptApp.newTrigger("sendDailyInvoicesEmailAt1130PM")
+    .timeBased()
+    .everyDays(1)
+    .atHour(23)
+    .nearMinute(30)
+    .inTimezone("Asia/Kolkata")
+    .create();
+
+  Logger.log("✅ Daily 11:30 PM Midnight Email Trigger installed successfully for snreddy.it@gmail.com!");
 }
 `;

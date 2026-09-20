@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Building2,
   Lock,
@@ -11,14 +11,8 @@ import {
   Eye,
   EyeOff,
   Clock,
-  Send,
   ArrowLeft,
-  ShieldAlert,
-  Key,
-  Copy,
-  Check,
-  HelpCircle,
-  RefreshCw,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth, MASTER_ADMIN_EMAIL } from '../context/AuthContext';
 
@@ -26,29 +20,19 @@ export const AuthScreen: React.FC = () => {
   const {
     loginWithEmail,
     registerWithEmail,
-    signInWithGoogle,
-    sendPasswordReset,
-    verifyResetCode,
-    confirmResetWithCode,
     resetPasswordWithSecurity,
   } = useAuth();
 
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'reset_password' | 'approval_pending'>('login');
-  const [forgotSubTab, setForgotSubTab] = useState<'email' | 'paste_code' | 'security_pin'>('email');
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'approval_pending'>('login');
 
-  // Input states
+  // Form input states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Reset Code & Security states
-  const [pastedCodeOrLink, setPastedCodeOrLink] = useState('');
-  const [verifiedEmailForReset, setVerifiedEmailForReset] = useState<string | null>(null);
-  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
-
-  // Admin Security Recovery states
+  // Admin Security Reset states
   const [securityMethod, setSecurityMethod] = useState<'pin' | 'question'>('pin');
   const [securityValue, setSecurityValue] = useState('');
 
@@ -64,98 +48,12 @@ export const AuthScreen: React.FC = () => {
     message?: string;
   } | null>(null);
 
-  // Auto-detect password reset parameters in the URL (when user clicks link from email)
-  useEffect(() => {
-    try {
-      const searchParams = new URLSearchParams(window.location.search);
-      const hashClean = window.location.hash.replace(/^#\/?/, '');
-      const hashParams = new URLSearchParams(hashClean);
-
-      const urlMode = searchParams.get('mode') || hashParams.get('mode');
-      const oobCode = searchParams.get('oobCode') || hashParams.get('oobCode');
-
-      if ((urlMode === 'resetPassword' || urlMode === 'reset_password') && oobCode) {
-        setMode('reset_password');
-        setPastedCodeOrLink(oobCode);
-        setIsVerifyingCode(true);
-
-        verifyResetCode(oobCode)
-          .then((res) => {
-            if (res.success && res.email) {
-              setVerifiedEmailForReset(res.email);
-              setEmail(res.email);
-              setInfoMessage(`Valid reset code for ${res.email}. Please choose a new password below.`);
-            } else {
-              setError(
-                res.error ||
-                  'This reset link has expired or timed out. Please request a new link or use the Admin Recovery tab.'
-              );
-            }
-          })
-          .catch(() => {
-            setError('Could not verify the reset link. It may have expired.');
-          })
-          .finally(() => {
-            setIsVerifyingCode(false);
-          });
-      }
-    } catch (e) {
-      console.warn('Error parsing reset URL parameters:', e);
-    }
-  }, []);
-
-  // Handle manual verification of pasted code or link
-  const handleVerifyPastedCode = async () => {
-    if (!pastedCodeOrLink.trim()) {
-      setError('Please paste the email link or reset code first.');
-      return;
-    }
-    setError(null);
-    setInfoMessage(null);
-    setIsVerifyingCode(true);
-
-    try {
-      const res = await verifyResetCode(pastedCodeOrLink);
-      if (res.success && res.email) {
-        setVerifiedEmailForReset(res.email);
-        setEmail(res.email);
-        setInfoMessage(`Link verified for ${res.email}! Now enter your new password below.`);
-      } else {
-        setVerifiedEmailForReset(null);
-        setError(
-          res.error ||
-            'The link or code could not be verified. If it timed out, click "Request Email Link" for a fresh link or use "Admin Recovery".'
-        );
-      }
-    } catch (err: any) {
-      setError(err.message || 'Error verifying code.');
-    } finally {
-      setIsVerifyingCode(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setError(null);
-    setInfoMessage(null);
-    setIsLoading(true);
-    try {
-      const res = await signInWithGoogle();
-      if (!res.success) {
-        setError(res.error || 'Google sign in failed.');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Google sign in error.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setInfoMessage(null);
 
-    // SIGN IN
+    // 1. SIGN IN
     if (mode === 'login') {
       if (!email.trim() || !password) {
         setError('Please enter both email and password.');
@@ -183,7 +81,7 @@ export const AuthScreen: React.FC = () => {
       }
     }
 
-    // REGISTRATION
+    // 2. REGISTRATION
     else if (mode === 'register') {
       if (!name.trim()) {
         setError('Please enter your full name.');
@@ -233,114 +131,18 @@ export const AuthScreen: React.FC = () => {
       }
     }
 
-    // FORGOT PASSWORD
+    // 3. FORGOT PASSWORD (DIRECT ADMIN PIN / SECURITY RESET)
     else if (mode === 'forgot') {
-      // Sub-tab 1: Send reset email
-      if (forgotSubTab === 'email') {
-        if (!email.trim() || !email.includes('@')) {
-          setError('Please enter a valid email address.');
-          return;
-        }
-        setIsLoading(true);
-        try {
-          const res = await sendPasswordReset(email);
-          if (res.success) {
-            setInfoMessage(
-              res.message ||
-                'Password reset link sent to your email! Click the link in the email, or paste it in the "Enter Code / Link" tab if your browser times out.'
-            );
-          } else {
-            setError(res.message || 'Could not send reset email.');
-          }
-        } catch (err: any) {
-          setError(err.message || 'Error sending password reset email.');
-        } finally {
-          setIsLoading(false);
-        }
+      if (!email.trim() || !email.includes('@')) {
+        setError('Please enter your email address.');
+        return;
       }
-
-      // Sub-tab 2: Reset using pasted code or link
-      else if (forgotSubTab === 'paste_code') {
-        if (!pastedCodeOrLink.trim()) {
-          setError('Please paste the email link or reset code from your email.');
-          return;
-        }
-        if (password.length < 6) {
-          setError('New password must be at least 6 characters long.');
-          return;
-        }
-        if (password !== confirmPassword) {
-          setError('Passwords do not match.');
-          return;
-        }
-
-        setIsLoading(true);
-        try {
-          const res = await confirmResetWithCode(pastedCodeOrLink, password);
-          if (res.success) {
-            setInfoMessage(res.message || 'Password reset successfully! You can now sign in.');
-            setMode('login');
-            setPassword('');
-            setConfirmPassword('');
-            setPastedCodeOrLink('');
-            setVerifiedEmailForReset(null);
-          } else {
-            setError(res.error || 'Could not reset password with this code.');
-          }
-        } catch (err: any) {
-          setError(err.message || 'Error resetting password.');
-        } finally {
-          setIsLoading(false);
-        }
-      }
-
-      // Sub-tab 3: Master Admin Security PIN or Security Question
-      else if (forgotSubTab === 'security_pin') {
-        if (!email.trim() || !email.includes('@')) {
-          setError('Please enter your email address.');
-          return;
-        }
-        if (!securityValue.trim()) {
-          setError(
-            securityMethod === 'pin'
-              ? 'Please enter the 6-digit Master Recovery PIN.'
-              : 'Please enter the agency name answer.'
-          );
-          return;
-        }
-        if (password.length < 6) {
-          setError('New password must be at least 6 characters long.');
-          return;
-        }
-        if (password !== confirmPassword) {
-          setError('Passwords do not match.');
-          return;
-        }
-
-        setIsLoading(true);
-        try {
-          const res = await resetPasswordWithSecurity(email, securityMethod, securityValue, password);
-          if (res.success) {
-            setInfoMessage(res.message || 'Password updated successfully! Please sign in with your new password.');
-            setMode('login');
-            setPassword('');
-            setConfirmPassword('');
-            setSecurityValue('');
-          } else {
-            setError(res.error || 'Security verification failed.');
-          }
-        } catch (err: any) {
-          setError(err.message || 'Error updating password.');
-        } finally {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    // DIRECT RESET PASSWORD (Arrived via URL parameter ?mode=resetPassword&oobCode=...)
-    else if (mode === 'reset_password') {
-      if (!pastedCodeOrLink.trim()) {
-        setError('Missing password reset action code.');
+      if (!securityValue.trim()) {
+        setError(
+          securityMethod === 'pin'
+            ? 'Please enter the 6-digit Master Recovery PIN (123456).'
+            : 'Please enter the agency name answer (VIJAYA AGENCIES).'
+        );
         return;
       }
       if (password.length < 6) {
@@ -354,25 +156,18 @@ export const AuthScreen: React.FC = () => {
 
       setIsLoading(true);
       try {
-        const res = await confirmResetWithCode(pastedCodeOrLink, password);
+        const res = await resetPasswordWithSecurity(email, securityMethod, securityValue, password);
         if (res.success) {
-          setInfoMessage(res.message || 'Password has been reset successfully! Please sign in with your new password.');
+          setInfoMessage(res.message || 'Password updated successfully! Please sign in with your new password.');
           setMode('login');
           setPassword('');
           setConfirmPassword('');
-          setPastedCodeOrLink('');
-          setVerifiedEmailForReset(null);
-          // Clean URL parameter
-          try {
-            window.history.replaceState({}, document.title, window.location.pathname);
-          } catch {
-            // ignore
-          }
+          setSecurityValue('');
         } else {
-          setError(res.error || 'Failed to update password.');
+          setError(res.error || 'Security verification failed.');
         }
       } catch (err: any) {
-        setError(err.message || 'Error completing password reset.');
+        setError(err.message || 'Error updating password.');
       } finally {
         setIsLoading(false);
       }
@@ -473,7 +268,7 @@ export const AuthScreen: React.FC = () => {
         ) : (
           <>
             {/* Mode Toggle Tabs (Sign In / Register) */}
-            {mode !== 'forgot' && mode !== 'reset_password' && (
+            {mode !== 'forgot' && (
               <div className="flex p-1 bg-slate-900/80 border border-slate-700 rounded-xl text-xs font-semibold">
                 <button
                   type="button"
@@ -508,13 +303,16 @@ export const AuthScreen: React.FC = () => {
               </div>
             )}
 
-            {/* FORGOT PASSWORD SUB-TABS */}
+            {/* FORGOT PASSWORD HEADER */}
             {mode === 'forgot' && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-blue-400">
-                    Password Assistance
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-blue-400">
+                      Reset Password
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
@@ -529,85 +327,9 @@ export const AuthScreen: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-900/80 border border-slate-700 rounded-xl text-[11px] font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setForgotSubTab('email');
-                      setError(null);
-                      setInfoMessage(null);
-                    }}
-                    className={`py-2 px-1 rounded-lg transition-all text-center leading-tight ${
-                      forgotSubTab === 'email'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    1. Send Email
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setForgotSubTab('paste_code');
-                      setError(null);
-                      setInfoMessage(null);
-                    }}
-                    className={`py-2 px-1 rounded-lg transition-all text-center leading-tight ${
-                      forgotSubTab === 'paste_code'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    2. Paste Link/Code
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setForgotSubTab('security_pin');
-                      setError(null);
-                      setInfoMessage(null);
-                    }}
-                    className={`py-2 px-1 rounded-lg transition-all text-center leading-tight ${
-                      forgotSubTab === 'security_pin'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    3. Admin PIN
-                  </button>
-                </div>
-
-                {/* Sub-tab description help note */}
                 <div className="text-[11px] text-slate-400 bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/50 leading-relaxed">
-                  {forgotSubTab === 'email' && (
-                    <span>
-                      Enter your email to request a reset link. If clicking the email link times out or does not open in your browser, copy the link or code from the email and use <strong>&ldquo;Paste Link/Code&rdquo;</strong>.
-                    </span>
-                  )}
-                  {forgotSubTab === 'paste_code' && (
-                    <span>
-                      Already received a reset email? If the email link gave a <strong>time out error</strong> when clicked, copy the entire link or code from the email and paste it below to reset directly!
-                    </span>
-                  )}
-                  {forgotSubTab === 'security_pin' && (
-                    <span>
-                      Instant Administrator recovery without waiting for email. Use the 6-digit Master PIN (<strong>123456</strong>) or Agency Name.
-                    </span>
-                  )}
+                  Reset your password securely using the 6-digit Master PIN (<strong>123456</strong>) or the agency name.
                 </div>
-              </div>
-            )}
-
-            {/* RESET PASSWORD HEADER (WHEN ARRIVING VIA EMAIL LINK) */}
-            {mode === 'reset_password' && (
-              <div className="space-y-2 p-3.5 rounded-xl bg-blue-950/40 border border-blue-700/50 text-center">
-                <Key className="w-6 h-6 text-blue-400 mx-auto" />
-                <h3 className="text-sm font-bold text-blue-200">Set New Password</h3>
-                <p className="text-xs text-slate-300">
-                  {verifiedEmailForReset
-                    ? `Create a secure new password for ${verifiedEmailForReset}`
-                    : 'Enter and confirm your new password below.'}
-                </p>
               </div>
             )}
 
@@ -648,65 +370,24 @@ export const AuthScreen: React.FC = () => {
                 </div>
               )}
 
-              {/* Email Input (Login, Register, Forgot Email, or Security Pin) */}
-              {(mode === 'login' ||
-                mode === 'register' ||
-                (mode === 'forgot' && forgotSubTab !== 'paste_code')) && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Email Address</label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="snreddy.it@gmail.com"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
-                  </div>
+              {/* Email Address Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Email Address</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="snreddy.it@gmail.com"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  />
                 </div>
-              )}
+              </div>
 
-              {/* PASTE RESET CODE OR LINK INPUT (Forgot > Paste Link / Code) */}
-              {mode === 'forgot' && forgotSubTab === 'paste_code' && (
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-300">
-                    Paste Reset Link or Action Code from Email
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      value={pastedCodeOrLink}
-                      onChange={(e) => setPastedCodeOrLink(e.target.value)}
-                      placeholder="https://...oobCode=... or code string"
-                      className="w-full pl-3 pr-20 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleVerifyPastedCode}
-                      disabled={isVerifyingCode || !pastedCodeOrLink.trim()}
-                      className="absolute right-1.5 top-1.5 px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-all"
-                    >
-                      {isVerifyingCode ? (
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <span>Verify</span>
-                      )}
-                    </button>
-                  </div>
-                  {verifiedEmailForReset && (
-                    <p className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Verified for account: {verifiedEmailForReset}</span>
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* SECURITY RECOVERY METHOD SELECTOR (Forgot > Security PIN) */}
-              {mode === 'forgot' && forgotSubTab === 'security_pin' && (
+              {/* SECURITY RECOVERY METHOD (Forgot Mode only) */}
+              {mode === 'forgot' && (
                 <div className="space-y-3">
                   <div className="flex gap-2">
                     <button
@@ -737,10 +418,10 @@ export const AuthScreen: React.FC = () => {
                     <label className="text-xs font-semibold text-slate-300">
                       {securityMethod === 'pin'
                         ? '6-Digit Master Recovery PIN'
-                        : 'Security Question: What is your distribution agency name?'}
+                        : 'Agency Name: What is your distribution agency name?'}
                     </label>
                     <input
-                      type={securityMethod === 'pin' ? 'text' : 'text'}
+                      type="text"
                       required
                       value={securityValue}
                       onChange={(e) => setSecurityValue(e.target.value)}
@@ -751,56 +432,48 @@ export const AuthScreen: React.FC = () => {
                 </div>
               )}
 
-              {/* PASSWORD INPUT (Login, Register, Paste Code, Security PIN, Reset Password) */}
-              {(mode === 'login' ||
-                mode === 'register' ||
-                mode === 'reset_password' ||
-                (mode === 'forgot' && forgotSubTab !== 'email')) && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-300">
-                      {mode === 'login' ? 'Password' : 'New Password (min 6 chars)'}
-                    </label>
-                    {mode === 'login' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode('forgot');
-                          setForgotSubTab('email');
-                          setError(null);
-                          setInfoMessage(null);
-                        }}
-                        className="text-xs text-blue-400 hover:text-blue-300 hover:underline"
-                      >
-                        Forgot Password?
-                      </button>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-10 pr-10 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    />
+              {/* PASSWORD INPUT */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300">
+                    {mode === 'login' ? 'Password' : 'New Password (min 6 chars)'}
+                  </label>
+                  {mode === 'login' && (
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-3 text-slate-400 hover:text-slate-200"
+                      onClick={() => {
+                        setMode('forgot');
+                        setError(null);
+                        setInfoMessage(null);
+                      }}
+                      className="text-xs text-blue-400 hover:text-blue-300 hover:underline"
                     >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      Forgot Password?
                     </button>
-                  </div>
+                  )}
                 </div>
-              )}
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-10 pr-10 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-200"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
 
-              {/* CONFIRM PASSWORD INPUT */}
-              {(mode === 'register' ||
-                mode === 'reset_password' ||
-                (mode === 'forgot' && forgotSubTab !== 'email')) && (
+              {/* CONFIRM PASSWORD INPUT (Register and Forgot modes) */}
+              {(mode === 'register' || mode === 'forgot') && (
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-300">Confirm Password</label>
                   <div className="relative">
@@ -832,13 +505,7 @@ export const AuthScreen: React.FC = () => {
                         ? 'Sign In'
                         : mode === 'register'
                         ? 'Submit for Approval'
-                        : mode === 'reset_password'
-                        ? 'Update & Set Password'
-                        : forgotSubTab === 'email'
-                        ? 'Send Password Reset Link'
-                        : forgotSubTab === 'paste_code'
-                        ? 'Verify Code & Set Password'
-                        : 'Verify Admin PIN & Reset Password'}
+                        : 'Verify & Reset Password'}
                     </span>
                     <ArrowRight className="w-4 h-4" />
                   </>
@@ -846,48 +513,8 @@ export const AuthScreen: React.FC = () => {
               </button>
             </form>
 
-            {/* Google Sign-in on Login Screen */}
-            {mode === 'login' && (
-              <div className="space-y-3 pt-1">
-                <div className="relative flex items-center justify-center">
-                  <div className="border-t border-slate-700 w-full" />
-                  <span className="bg-slate-800 px-3 text-[11px] text-slate-400 uppercase tracking-wider font-semibold">
-                    Or continue with
-                  </span>
-                  <div className="border-t border-slate-700 w-full" />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={isLoading}
-                  className="w-full py-2.5 px-4 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-700/80 hover:border-slate-600 text-slate-200 text-xs font-semibold transition-all flex items-center justify-center gap-2.5 shadow-sm active:scale-[0.99]"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
-                  <span>Sign in with Google</span>
-                </button>
-              </div>
-            )}
-
-            {/* Back to sign in button for forgot password / reset password */}
-            {(mode === 'forgot' || mode === 'reset_password') && (
+            {/* Back to sign in button for forgot password */}
+            {mode === 'forgot' && (
               <div className="text-center pt-2">
                 <button
                   type="button"

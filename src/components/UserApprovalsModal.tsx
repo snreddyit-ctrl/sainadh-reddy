@@ -7,13 +7,13 @@ import {
   Clock,
   Mail,
   AlertCircle,
+  AlertTriangle,
   X,
   Trash2,
-  Send,
   UserCheck,
-  ChevronRight,
-  ShieldAlert,
   Search,
+  RefreshCw,
+  Shield,
 } from 'lucide-react';
 import { firestoreService } from '../services/firestoreService';
 import { useAuth, MASTER_ADMIN_EMAIL } from '../context/AuthContext';
@@ -25,10 +25,18 @@ interface UserApprovalsModalProps {
   onRefreshPendingCount?: () => void;
 }
 
+interface UserTarget {
+  id: string;
+  uid?: string;
+  email: string;
+  displayName?: string;
+  role?: string;
+}
+
 export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
   isOpen,
   onClose,
-  pendingCount,
+  pendingCount: _pendingCount,
   onRefreshPendingCount,
 }) => {
   const { currentUser } = useAuth();
@@ -38,6 +46,10 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
   const [notificationMsg, setNotificationMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // In-modal confirmation dialog states (eliminates window.confirm which fails in iframes)
+  const [userToDelete, setUserToDelete] = useState<UserTarget | null>(null);
+  const [userToDecline, setUserToDecline] = useState<UserTarget | null>(null);
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -54,6 +66,9 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       loadUsers();
+      setNotificationMsg(null);
+      setUserToDelete(null);
+      setUserToDecline(null);
     }
   }, [isOpen]);
 
@@ -80,11 +95,20 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
     );
   });
 
-  const handleApprove = async (uid: string, userEmail: string, userName: string, role: 'staff' | 'manager' | 'admin') => {
-    setActionInProgressId(uid);
+  const handleApprove = async (
+    targetId: string,
+    userEmail: string,
+    userName: string,
+    role: 'staff' | 'manager' | 'admin'
+  ) => {
+    setActionInProgressId(targetId);
     setNotificationMsg(null);
     try {
-      const res = await firestoreService.approveUser(uid, role, currentUser?.email || MASTER_ADMIN_EMAIL);
+      const res = await firestoreService.approveUser(
+        targetId,
+        role,
+        currentUser?.email || MASTER_ADMIN_EMAIL
+      );
       if (res.success) {
         setNotificationMsg({
           type: 'success',
@@ -102,47 +126,73 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
     }
   };
 
-  const handleReject = async (uid: string, userEmail: string, userName: string) => {
-    if (!window.confirm(`Are you sure you want to decline registration for ${userName} (${userEmail})?`)) {
-      return;
-    }
-    setActionInProgressId(uid);
+  const confirmDeclineUser = async () => {
+    if (!userToDecline) return;
+    const { id, uid, email, displayName } = userToDecline;
+    const targetId = id || uid || email;
+
+    setActionInProgressId(targetId);
     setNotificationMsg(null);
+    setUserToDecline(null);
+
     try {
-      const res = await firestoreService.rejectUser(uid, 'Declined by administrator');
+      const res = await firestoreService.rejectUser(targetId, 'Declined by administrator');
       if (res.success) {
         setNotificationMsg({
           type: 'success',
-          text: `Registration for ${userName} (${userEmail}) has been declined.`,
+          text: `Registration for ${displayName || email} (${email}) has been declined.`,
         });
         await loadUsers();
         if (onRefreshPendingCount) onRefreshPendingCount();
       } else {
-        setNotificationMsg({ type: 'error', text: res.message || 'Rejection failed.' });
+        setNotificationMsg({ type: 'error', text: res.message || 'Decline failed.' });
       }
     } catch (e: any) {
-      setNotificationMsg({ type: 'error', text: e.message || 'Failed to decline.' });
+      setNotificationMsg({ type: 'error', text: e.message || 'Failed to decline user.' });
     } finally {
       setActionInProgressId(null);
     }
   };
 
-  const handleDeleteUser = async (uid: string, userEmail: string) => {
-    if (userEmail.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) {
-      alert('Master administrator account cannot be deleted.');
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    const { id, uid, email, displayName } = userToDelete;
+
+    if (email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) {
+      setNotificationMsg({
+        type: 'error',
+        text: 'Master administrator account cannot be deleted.',
+      });
+      setUserToDelete(null);
       return;
     }
-    if (!window.confirm(`Permanently remove account record for ${userEmail}?`)) {
-      return;
-    }
-    setActionInProgressId(uid);
+
+    const targetId = id || uid || email;
+    setActionInProgressId(targetId);
+    setNotificationMsg(null);
+    setUserToDelete(null);
+
     try {
-      await firestoreService.deleteUserAccount(uid);
-      await loadUsers();
-      if (onRefreshPendingCount) onRefreshPendingCount();
-      setNotificationMsg({ type: 'success', text: `Account for ${userEmail} was deleted.` });
+      const res = await firestoreService.deleteUserAccount(targetId, email);
+      if (res.success) {
+        setNotificationMsg({
+          type: 'success',
+          text: `Account for ${displayName || email} (${email}) was permanently deleted.`,
+        });
+        await loadUsers();
+        if (onRefreshPendingCount) onRefreshPendingCount();
+      } else {
+        setNotificationMsg({
+          type: 'error',
+          text: res.message || 'Failed to delete user account.',
+        });
+      }
     } catch (e: any) {
-      setNotificationMsg({ type: 'error', text: 'Failed to delete user.' });
+      console.error('Delete user error:', e);
+      setNotificationMsg({
+        type: 'error',
+        text: e.message || 'An error occurred while deleting the user.',
+      });
     } finally {
       setActionInProgressId(null);
     }
@@ -175,7 +225,7 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
                 )}
               </h2>
               <p className="text-xs text-slate-500">
-                Manage user registrations, permissions, and email approvals for Vijaya Agencies
+                Manage user registrations, roles, permissions, and account removal
               </p>
             </div>
           </div>
@@ -187,10 +237,10 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
           </button>
         </div>
 
-        {/* Status Notification */}
+        {/* Status Notification Banner */}
         {notificationMsg && (
           <div
-            className={`mx-6 mt-4 p-3 rounded-xl text-xs flex items-center justify-between ${
+            className={`mx-6 mt-4 p-3 rounded-xl text-xs flex items-center justify-between animate-in fade-in ${
               notificationMsg.type === 'success'
                 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                 : 'bg-red-50 text-red-800 border border-red-200'
@@ -198,18 +248,102 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
           >
             <div className="flex items-center gap-2">
               {notificationMsg.type === 'success' ? (
-                <CheckCircle className="w-4 h-4 text-emerald-600" />
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
               ) : (
-                <AlertCircle className="w-4 h-4 text-red-600" />
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
               )}
               <span className="font-medium">{notificationMsg.text}</span>
             </div>
             <button
               onClick={() => setNotificationMsg(null)}
-              className="text-xs opacity-70 hover:opacity-100 underline"
+              className="text-xs opacity-70 hover:opacity-100 underline ml-2"
             >
               Dismiss
             </button>
+          </div>
+        )}
+
+        {/* IN-MODAL CONFIRMATION DIALOG: DELETE ACCOUNT */}
+        {userToDelete && (
+          <div className="mx-6 mt-4 p-4 rounded-xl bg-red-50 border border-red-200 text-slate-800 space-y-3 animate-in fade-in">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-red-900">Permanently Delete Account?</h4>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Are you sure you want to remove the account for{' '}
+                  <strong className="text-slate-900">{userToDelete.displayName || userToDelete.email}</strong> (
+                  <span className="font-mono text-red-700">{userToDelete.email}</span>)?
+                  This will revoke their access to Vijaya Agencies immediately.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteUser}
+                disabled={!!actionInProgressId}
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all disabled:opacity-50"
+              >
+                {actionInProgressId ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                <span>Yes, Delete Account</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* IN-MODAL CONFIRMATION DIALOG: DECLINE REGISTRATION */}
+        {userToDecline && (
+          <div className="mx-6 mt-4 p-4 rounded-xl bg-amber-50 border border-amber-200 text-slate-800 space-y-3 animate-in fade-in">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <XCircle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-amber-900">Decline User Registration?</h4>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Decline registration request for{' '}
+                  <strong className="text-slate-900">{userToDecline.displayName || userToDecline.email}</strong> (
+                  <span className="font-mono text-amber-800">{userToDecline.email}</span>)?
+                  Their status will be set to rejected.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setUserToDecline(null)}
+                className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeclineUser}
+                disabled={!!actionInProgressId}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all disabled:opacity-50"
+              >
+                {actionInProgressId ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5" />
+                )}
+                <span>Decline Registration</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -248,15 +382,26 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
             </button>
           </div>
 
-          <div className="relative w-full sm:w-56">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              placeholder="Search users..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative w-full sm:w-52">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={loadUsers}
+              disabled={isLoading}
+              title="Refresh users"
+              className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
         </div>
 
@@ -273,7 +418,9 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
                 <Users className="w-6 h-6" />
               </div>
               <p className="text-sm font-semibold text-slate-700">
-                {activeTab === 'pending' ? 'No pending registration requests' : 'No approved users matching search'}
+                {activeTab === 'pending'
+                  ? 'No pending registration requests'
+                  : 'No approved users matching search'}
               </p>
               <p className="text-xs text-slate-400 max-w-xs mx-auto">
                 {activeTab === 'pending'
@@ -285,11 +432,12 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
             displayedList.map((user) => {
               const isMaster = (user.email || '').toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
               const isPending = user.approvalStatus === 'pending' || !user.isApproved;
-              const isBusy = actionInProgressId === user.uid || actionInProgressId === user.id;
+              const targetDocId = user.id || user.uid;
+              const isBusy = actionInProgressId === targetDocId || actionInProgressId === user.email;
 
               return (
                 <div
-                  key={user.uid || user.id}
+                  key={targetDocId || user.email}
                   className={`p-4 rounded-xl border transition-all ${
                     isPending
                       ? 'border-amber-200 bg-amber-50/40'
@@ -315,7 +463,7 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
                             {user.displayName || 'Unnamed User'}
                           </h4>
                           {isMaster && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
                               Master Admin
                             </span>
                           )}
@@ -355,30 +503,32 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
                     <div className="flex flex-wrap items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                       {isPending ? (
                         <>
+                          {/* Approve Staff */}
                           <button
                             type="button"
                             disabled={isBusy}
                             onClick={() =>
                               handleApprove(
-                                user.uid || user.id,
+                                targetDocId,
                                 user.email,
                                 user.displayName || user.email,
                                 'staff'
                               )
                             }
                             className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors flex items-center gap-1 shadow-xs disabled:opacity-50"
-                            title="Approve as distribution Staff"
+                            title="Approve as Staff"
                           >
                             <CheckCircle className="w-3.5 h-3.5" />
-                            <span>Approve Staff</span>
+                            <span>Staff</span>
                           </button>
 
+                          {/* Approve Manager */}
                           <button
                             type="button"
                             disabled={isBusy}
                             onClick={() =>
                               handleApprove(
-                                user.uid || user.id,
+                                targetDocId,
                                 user.email,
                                 user.displayName || user.email,
                                 'manager'
@@ -387,27 +537,52 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
                             className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1 shadow-xs disabled:opacity-50"
                             title="Approve as Manager"
                           >
-                            <span>Approve Manager</span>
+                            <Shield className="w-3.5 h-3.5" />
+                            <span>Manager</span>
                           </button>
 
+                          {/* Decline button (triggers in-modal confirmation) */}
                           <button
                             type="button"
                             disabled={isBusy}
                             onClick={() =>
-                              handleReject(
-                                user.uid || user.id,
-                                user.email,
-                                user.displayName || user.email
-                              )
+                              setUserToDecline({
+                                id: user.id || targetDocId,
+                                uid: user.uid,
+                                email: user.email,
+                                displayName: user.displayName,
+                              })
                             }
-                            className="px-2 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold transition-colors flex items-center gap-1 disabled:opacity-50"
+                            className="px-2 py-1.5 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-100 text-xs font-semibold transition-colors flex items-center gap-1 disabled:opacity-50"
+                            title="Decline registration"
                           >
                             <XCircle className="w-3.5 h-3.5" />
                             <span>Decline</span>
                           </button>
+
+                          {/* Delete option for pending user (triggers in-modal confirmation) */}
+                          {!isMaster && (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() =>
+                                setUserToDelete({
+                                  id: user.id || targetDocId,
+                                  uid: user.uid,
+                                  email: user.email,
+                                  displayName: user.displayName,
+                                })
+                              }
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors border border-transparent hover:border-red-200"
+                              title="Permanently delete user record"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </>
                       ) : (
                         <>
+                          {/* Notify Email */}
                           <button
                             type="button"
                             onClick={() =>
@@ -417,16 +592,46 @@ export const UserApprovalsModal: React.FC<UserApprovalsModalProps> = ({
                             title="Send confirmation email"
                           >
                             <Mail className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Notify Email</span>
+                            <span>Email</span>
                           </button>
 
+                          {/* Quick Role Switch for approved user */}
+                          {!isMaster && (
+                            <select
+                              disabled={isBusy}
+                              value={user.role || 'staff'}
+                              onChange={(e) =>
+                                handleApprove(
+                                  targetDocId,
+                                  user.email,
+                                  user.displayName || user.email,
+                                  e.target.value as 'staff' | 'manager' | 'admin'
+                                )
+                              }
+                              className="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              title="Change user permission level"
+                            >
+                              <option value="staff">Staff</option>
+                              <option value="manager">Manager</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          )}
+
+                          {/* Delete option for approved user (triggers in-modal confirmation) */}
                           {!isMaster && (
                             <button
                               type="button"
                               disabled={isBusy}
-                              onClick={() => handleDeleteUser(user.uid || user.id, user.email)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                              title="Delete account"
+                              onClick={() =>
+                                setUserToDelete({
+                                  id: user.id || targetDocId,
+                                  uid: user.uid,
+                                  email: user.email,
+                                  displayName: user.displayName,
+                                })
+                              }
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors border border-transparent hover:border-red-200"
+                              title="Delete user account"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>

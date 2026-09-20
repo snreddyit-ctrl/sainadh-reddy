@@ -31,41 +31,785 @@
     "RTC COLONY ( CADBURY )",
     "OLD CLUB ROAD ( CADBURY )"
   ],
+  "auth": {
+    "username": "admin",
+    "passwordHash": "11afb40b8bb8c7f0778725f4626b1c60cf6e1fbf3fd4a0dd9243d90746655c3f",
+    "name": "Admin User",
+    "email": "snreddy.it@gmail.com",
+    "securityQuestion": "What is your distribution agency name?",
+    "securityAnswerHash": "fd64de6f4bf6d9d658ec138828268f902b72ee53d4babb85a1c20e2f6000546b",
+    "recoveryPin": "123456"
+  },
   "sheetsConfig": {
     "appsScriptUrl": "https://script.google.com/macros/s/AKfycbwdunEaJVY7tdWTmvSDM_7rMe8UBRI937HVu-jxQmwUnxCou0o6gq9V6-JVLXGupf3eNw/exec",
     "isConnected": true,
-    "lastSynced": "2026-08-23T14:35:35.594Z"
+    "lastSynced": "2026-09-20T18:26:06.583Z"
+  },
+  "reportConfig": {
+    "recipientEmail": "snreddy.it@gmail.com",
+    "scheduleTime": "23:30",
+    "enabled": true
   },
   "invoices": [
     {
-      "billNo": "243",
-      "root": "AMARAVATHI ROAD 1",
-      "billDate": "2026-08-23",
-      "billAmount": 768,
-      "amountPaid": 0,
-      "amountPending": 768,
-      "status": "Pending",
-      "updatedAt": "2026-08-23T14:32:46.569Z"
-    },
-    {
-      "billNo": "456",
-      "root": "AMARAVATHI ROAD 1",
-      "billDate": "2026-08-23",
-      "billAmount": 978,
-      "amountPaid": 0,
-      "amountPending": 978,
-      "status": "Pending",
-      "updatedAt": "2026-08-23T14:32:46.569Z"
-    },
-    {
-      "billNo": "876",
-      "root": "AMARAVATHI ROAD 1",
-      "billDate": "2026-08-23",
-      "billAmount": 1015,
-      "amountPaid": 200,
-      "amountPending": 815,
+      "billNo": "4356",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-08-11",
+      "billAmount": 23985,
+      "amountPaid": 8000,
+      "amountPending": 15985,
       "status": "Part Paid",
-      "updatedAt": "2026-08-23T14:32:46.569Z"
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4348",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-08-11",
+      "billAmount": 4529,
+      "amountPaid": 0,
+      "amountPending": 4529,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4350",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-08-11",
+      "billAmount": 866,
+      "amountPaid": 300,
+      "amountPending": 566,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4676",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-08-18",
+      "billAmount": 6298,
+      "amountPaid": 4298,
+      "amountPending": 2000,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4674",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-08-18",
+      "billAmount": 4515,
+      "amountPaid": 1700,
+      "amountPending": 2815,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "5163",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-08-25",
+      "billAmount": 3432,
+      "amountPaid": 1000,
+      "amountPending": 2432,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "5172",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-08-25",
+      "billAmount": 8358,
+      "amountPaid": 0,
+      "amountPending": 8358,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6307",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 7481,
+      "amountPaid": 0,
+      "amountPending": 7481,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6349",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 8880,
+      "amountPaid": 4000,
+      "amountPending": 4880,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6348",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 750,
+      "amountPaid": 0,
+      "amountPending": 750,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6288",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 2663,
+      "amountPaid": 1109,
+      "amountPending": 1554,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6289",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 1436,
+      "amountPaid": 0,
+      "amountPending": 1436,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6290",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 755,
+      "amountPaid": 250,
+      "amountPending": 505,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6306",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 2040,
+      "amountPaid": 0,
+      "amountPending": 2040,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6302",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 408,
+      "amountPaid": 0,
+      "amountPending": 408,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6301",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 1223,
+      "amountPaid": 400,
+      "amountPending": 823,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6298",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 6433,
+      "amountPaid": 0,
+      "amountPending": 6433,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6296",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 3196,
+      "amountPaid": 0,
+      "amountPending": 3196,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6297",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 1727,
+      "amountPaid": 0,
+      "amountPending": 1727,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6295",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 4709,
+      "amountPaid": 3709,
+      "amountPending": 1000,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6309",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 573,
+      "amountPaid": 0,
+      "amountPending": 573,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6107",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-08-31",
+      "billAmount": 8520,
+      "amountPaid": 0,
+      "amountPending": 8520,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6678",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 12328,
+      "amountPaid": 0,
+      "amountPending": 12328,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6677",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 3627,
+      "amountPaid": 0,
+      "amountPending": 3627,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6676",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 350,
+      "amountPaid": 0,
+      "amountPending": 350,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6675",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 713,
+      "amountPaid": 0,
+      "amountPending": 713,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6681",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 491,
+      "amountPaid": 0,
+      "amountPending": 491,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6680",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 13569,
+      "amountPaid": 0,
+      "amountPending": 13569,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6679",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 20479,
+      "amountPaid": 0,
+      "amountPending": 20479,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6673",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 12733,
+      "amountPaid": 0,
+      "amountPending": 12733,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6669",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 4971,
+      "amountPaid": 0,
+      "amountPending": 4971,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6674",
+      "root": "PONNUR ROAD ( CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 2165,
+      "amountPaid": 0,
+      "amountPending": 2165,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "3445",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-07-28",
+      "billAmount": 5360,
+      "amountPaid": 4000,
+      "amountPending": 1360,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6213",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 1482,
+      "amountPaid": 0,
+      "amountPending": 1482,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6214",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 2553,
+      "amountPaid": 0,
+      "amountPending": 2553,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6216",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 2598,
+      "amountPaid": 900,
+      "amountPending": 1698,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4326",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-08-11",
+      "billAmount": 13868,
+      "amountPaid": 10000,
+      "amountPending": 3868,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6241",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 10653,
+      "amountPaid": 0,
+      "amountPending": 10653,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4648",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-08-18",
+      "billAmount": 2980,
+      "amountPaid": 0,
+      "amountPending": 2980,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6255",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 2765,
+      "amountPaid": 0,
+      "amountPending": 2765,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6242",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 3324,
+      "amountPaid": 0,
+      "amountPending": 3324,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6224",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 1994,
+      "amountPaid": 700,
+      "amountPending": 1294,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "5071",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-08-25",
+      "billAmount": 2048,
+      "amountPaid": 1000,
+      "amountPending": 1048,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6227",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 893,
+      "amountPaid": 0,
+      "amountPending": 893,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6246",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 6737,
+      "amountPaid": 4000,
+      "amountPending": 2737,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4656",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-08-18",
+      "billAmount": 3301,
+      "amountPaid": 0,
+      "amountPending": 3301,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "5036",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-08-25",
+      "billAmount": 4205,
+      "amountPaid": 3000,
+      "amountPending": 1205,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6247",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 8156,
+      "amountPaid": 5000,
+      "amountPending": 3156,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "3926",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-08-04",
+      "billAmount": 2955,
+      "amountPaid": 2000,
+      "amountPending": 955,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6236",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 2047,
+      "amountPaid": 700,
+      "amountPending": 1347,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6245",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 1347,
+      "amountPaid": 800,
+      "amountPending": 547,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4659",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-08-18",
+      "billAmount": 8238,
+      "amountPaid": 6238,
+      "amountPending": 2000,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6248",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 2617,
+      "amountPaid": 0,
+      "amountPending": 2617,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4661",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-08-18",
+      "billAmount": 2173,
+      "amountPaid": 1500,
+      "amountPending": 673,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6249",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-02",
+      "billAmount": 986,
+      "amountPaid": 500,
+      "amountPending": 486,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6659",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 3589,
+      "amountPaid": 0,
+      "amountPending": 3589,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6657",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 2912,
+      "amountPaid": 0,
+      "amountPending": 2912,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6665",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 809,
+      "amountPaid": 0,
+      "amountPending": 809,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6663",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 281,
+      "amountPaid": 0,
+      "amountPending": 281,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6664",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 814,
+      "amountPaid": 0,
+      "amountPending": 814,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6667",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 3070,
+      "amountPaid": 0,
+      "amountPending": 3070,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6655",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 3982,
+      "amountPaid": 0,
+      "amountPending": 3982,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6656",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 1278,
+      "amountPaid": 0,
+      "amountPending": 1278,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6653",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 1275,
+      "amountPaid": 0,
+      "amountPending": 1275,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6652",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 1076,
+      "amountPaid": 0,
+      "amountPending": 1076,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6661",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 1303,
+      "amountPaid": 0,
+      "amountPending": 1303,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6654",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 1312,
+      "amountPaid": 0,
+      "amountPending": 1312,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6660",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 5752,
+      "amountPaid": 0,
+      "amountPending": 5752,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6658",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 900,
+      "amountPaid": 0,
+      "amountPending": 900,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6651",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 808,
+      "amountPaid": 0,
+      "amountPending": 808,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "6650",
+      "root": "CHOWTRA (CADBURY)",
+      "billDate": "2026-09-08",
+      "billAmount": 471,
+      "amountPaid": 0,
+      "amountPending": 471,
+      "status": "Pending",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4027",
+      "root": "NEHRU NAGAR ( CADBURY )",
+      "billDate": "2026-08-05",
+      "billAmount": 4477,
+      "amountPaid": 3400,
+      "amountPending": 1077,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4406",
+      "root": "NEHRU NAGAR ( CADBURY )",
+      "billDate": "2026-08-12",
+      "billAmount": 426,
+      "amountPaid": 226,
+      "amountPending": 200,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "4747",
+      "root": "NEHRU NAGAR ( CADBURY )",
+      "billDate": "2026-08-19",
+      "billAmount": 4595,
+      "amountPaid": 3000,
+      "amountPending": 1595,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.791Z"
+    },
+    {
+      "billNo": "5300",
+      "root": "NEHRU NAGAR ( CADBURY )",
+      "billDate": "2026-08-26",
+      "billAmount": 2101,
+      "amountPaid": 701,
+      "amountPending": 1400,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.792Z"
+    },
+    {
+      "billNo": "5296",
+      "root": "NEHRU NAGAR ( CADBURY )",
+      "billDate": "2026-08-26",
+      "billAmount": 4979,
+      "amountPaid": 2000,
+      "amountPending": 2979,
+      "status": "Part Paid",
+      "updatedAt": "2026-09-20T18:26:04.792Z"
     }
   ],
   "payments": [

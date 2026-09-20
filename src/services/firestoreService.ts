@@ -781,14 +781,68 @@ export const firestoreService = {
     }
   },
 
-  async deleteUserAccount(uid: string): Promise<{ success: boolean; message?: string }> {
+  async deleteUserAccount(identifier: string, email?: string): Promise<{ success: boolean; message?: string }> {
     try {
-      await deleteDoc(doc(db, 'users', uid));
-      try {
-        await deleteDoc(doc(db, 'user_approvals', uid));
-      } catch (e) {
-        // ignore
+      if (!identifier && !email) {
+        return { success: false, message: 'Missing user identifier to delete' };
       }
+
+      // 1. Direct doc deletion by doc ID (if identifier is the doc id)
+      if (identifier) {
+        try {
+          await deleteDoc(doc(db, 'users', identifier));
+        } catch (e) {
+          console.warn('Direct deleteDoc users failed, trying query:', e);
+        }
+        try {
+          await deleteDoc(doc(db, 'user_approvals', identifier));
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      // 2. Query deletion by uid field
+      if (identifier) {
+        try {
+          const qUid = query(collection(db, 'users'), where('uid', '==', identifier));
+          const snapUid = await getDocs(qUid);
+          for (const d of snapUid.docs) {
+            await deleteDoc(d.ref);
+          }
+        } catch (e) {
+          console.warn('Delete by uid field failed:', e);
+        }
+      }
+
+      // 3. Query deletion by email field
+      const cleanEmail = email
+        ? email.trim().toLowerCase()
+        : identifier.includes('@')
+        ? identifier.trim().toLowerCase()
+        : null;
+
+      if (cleanEmail) {
+        try {
+          const qEmail = query(collection(db, 'users'), where('email', '==', cleanEmail));
+          const snapEmail = await getDocs(qEmail);
+          for (const d of snapEmail.docs) {
+            await deleteDoc(d.ref);
+          }
+        } catch (e) {
+          console.warn('Delete users by email failed:', e);
+        }
+
+        try {
+          const qApp = query(collection(db, 'user_approvals'), where('email', '==', cleanEmail));
+          const snapApp = await getDocs(qApp);
+          for (const d of snapApp.docs) {
+            await deleteDoc(d.ref);
+          }
+        } catch (e) {
+          console.warn('Delete user_approvals by email failed:', e);
+        }
+      }
+
       return { success: true };
     } catch (err: any) {
       console.error('Firestore deleteUserAccount error:', err);
