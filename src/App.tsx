@@ -17,6 +17,7 @@ import { ExportCenterModal } from './components/ExportCenterModal';
 import { FirebaseStatusModal } from './components/FirebaseStatusModal';
 import { UserApprovalsModal } from './components/UserApprovalsModal';
 import { AuthScreen } from './components/AuthScreen';
+import { InactivityHandler } from './components/InactivityHandler';
 import dashboardForestBg from './assets/images/dashboard_forest_bg.jpg';
 import { AuthProvider, useAuth, MASTER_ADMIN_EMAIL } from './context/AuthContext';
 import { firestoreService, DEFAULT_ROOTS } from './services/firestoreService';
@@ -420,6 +421,9 @@ function MainApp() {
 
   return (
     <div className="relative min-h-screen bg-stone-100/70 text-slate-900 font-sans flex antialiased overflow-x-hidden">
+      {/* 5-Minute Inactivity Auto Sign-Out Manager */}
+      <InactivityHandler />
+
       {/* Background Forest & Deers Wallpaper for the Web Dashboard */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <img
