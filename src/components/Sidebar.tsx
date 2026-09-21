@@ -13,6 +13,7 @@ import {
   LogOut,
   UserCheck,
   RefreshCw,
+  Sliders,
 } from 'lucide-react';
 import { ActiveScreen } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -60,6 +61,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'add_payment' as ActiveScreen, label: 'Add Payment', icon: CreditCard },
     { id: 'root_pending' as ActiveScreen, label: 'Root-wise Pending', icon: Building2 },
     { id: 'dashboard' as ActiveScreen, label: 'Analytics & Charts', icon: LayoutDashboard },
+    {
+      id: 'app_management' as ActiveScreen,
+      label: 'App Management',
+      icon: Sliders,
+      badge: pendingApprovalsCount,
+    },
   ];
 
   return (

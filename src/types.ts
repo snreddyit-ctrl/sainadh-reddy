@@ -76,4 +76,5 @@ export type ActiveScreen =
   | 'add_payment'
   | 'dashboard'
   | 'root_pending'
-  | 'sheets_settings';
+  | 'sheets_settings'
+  | 'app_management';

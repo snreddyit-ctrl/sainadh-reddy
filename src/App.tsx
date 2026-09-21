@@ -18,6 +18,7 @@ import { FirebaseStatusModal } from './components/FirebaseStatusModal';
 import { UserApprovalsModal } from './components/UserApprovalsModal';
 import { AuthScreen } from './components/AuthScreen';
 import { InactivityHandler } from './components/InactivityHandler';
+import { AppManagementScreen } from './components/AppManagementScreen';
 import dashboardForestBg from './assets/images/dashboard_forest_bg.jpg';
 import { AuthProvider, useAuth, MASTER_ADMIN_EMAIL } from './context/AuthContext';
 import { firestoreService, DEFAULT_ROOTS } from './services/firestoreService';
@@ -505,7 +506,11 @@ function MainApp() {
                   roots={roots}
                   onSelectInvoice={(inv) => setSelectedInvoice(inv)}
                   onQuickPayment={handleQuickPayment}
-                  onBulkDelete={handleBulkDeleteInvoices}
+                  onNavigateToAddInvoice={() => {
+                    setActiveScreen('add_invoice');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  onBulkDeletePaid={handleBulkDeleteInvoices}
                   onOpenDownloadModal={(r) => {
                     setDownloadModalRoot(r || 'All');
                     setIsDownloadModalOpen(true);
@@ -564,6 +569,27 @@ function MainApp() {
                   }}
                 />
               )}
+
+              {activeScreen === 'app_management' && (
+                <AppManagementScreen
+                  invoices={invoices}
+                  roots={roots}
+                  pendingApprovalsCount={pendingApprovalsCount}
+                  isSyncing={isSyncing}
+                  onSync={handleForceSync}
+                  onOpenFirebaseModal={() => setIsFirebaseModalOpen(true)}
+                  onOpenExportCenter={() => setIsExportCenterOpen(true)}
+                  onOpenManageRoots={() => setIsRootsModalOpen(true)}
+                  onOpenApprovalsModal={() => setIsApprovalsModalOpen(true)}
+                  onOpenDownloadModal={(r) => {
+                    setDownloadModalRoot(r || 'All');
+                    setIsDownloadModalOpen(true);
+                  }}
+                  onOpenBulkDeletePaid={() => {
+                    setActiveScreen('all_bills');
+                  }}
+                />
+              )}
             </>
           )}
         </main>
@@ -580,6 +606,7 @@ function MainApp() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         pendingCount={pendingCount}
+        pendingApprovalsCount={pendingApprovalsCount}
       />
 
       {/* Invoice Details Modal */}
