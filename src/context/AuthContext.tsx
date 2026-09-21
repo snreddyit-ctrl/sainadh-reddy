@@ -102,49 +102,92 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   // Sync profile from Firestore or create one
-  const syncUserProfile = async (user: AuthUser) => {
+  const syncUserProfile = async (user: AuthUser): Promise<AuthResult> => {
     try {
+      const cleanEmail = (user.email || '').trim().toLowerCase();
+      const isMasterAdmin = cleanEmail === MASTER_ADMIN_EMAIL.toLowerCase();
+
       const userDocRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userDocRef);
+      let targetRef = userDocRef;
+      let data: any = null;
 
       if (userSnap.exists()) {
-        const data = userSnap.data() as any;
-        const isMasterAdmin = (user.email || '').toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+        data = userSnap.data();
+      } else if (cleanEmail) {
+        const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          targetRef = snap.docs[0].ref;
+          data = snap.docs[0].data();
+        }
+      }
 
-        // Check approval status for non-master admin users
-        const isApproved = isMasterAdmin ? true : data.isApproved !== false && data.approvalStatus !== 'pending' && data.approvalStatus !== 'rejected';
+      if (data) {
+        if (data.approvalStatus === 'rejected') {
+          localStorage.removeItem(LOCAL_SESSION_KEY);
+          setCurrentUser(null);
+          setUserProfile(null);
+          return {
+            success: false,
+            error: `Your account registration was declined by the administrator (${MASTER_ADMIN_EMAIL}).`,
+          };
+        }
+
+        const isApproved = isMasterAdmin ? true : data.isApproved !== false && data.approvalStatus !== 'pending';
         const approvalStatus = isMasterAdmin ? 'approved' : (data.approvalStatus || (isApproved ? 'approved' : 'pending'));
 
+        if (!isApproved) {
+          localStorage.removeItem(LOCAL_SESSION_KEY);
+          setCurrentUser(null);
+          setUserProfile(null);
+          return {
+            success: false,
+            isPendingApproval: true,
+            pendingEmail: cleanEmail,
+            pendingName: data.displayName || user.displayName || cleanEmail,
+            error: `Your account is pending administrator approval. An email notification has been dispatched to ${MASTER_ADMIN_EMAIL}.`,
+          };
+        }
+
         const profile: AppUserProfile = {
-          uid: user.uid,
-          email: user.email,
+          uid: data.uid || user.uid,
+          email: user.email || data.email,
           displayName: data.displayName || user.displayName || 'Authorized User',
           role: isMasterAdmin ? 'admin' : data.role || 'staff',
-          photoURL: user.photoURL,
-          approvalStatus,
-          isApproved,
+          photoURL: user.photoURL || data.photoURL || null,
+          approvalStatus: 'approved',
+          isApproved: true,
           createdAt: data.createdAt,
-          lastLogin: data.lastLogin,
+          lastLogin: new Date().toISOString(),
           approvedAt: data.approvedAt,
           approvedBy: data.approvedBy,
         };
 
-        if (!isApproved) {
-          // Deny active session if not approved
-          localStorage.removeItem(LOCAL_SESSION_KEY);
-          setCurrentUser(null);
-          setUserProfile(null);
-          return;
-        }
+        await updateDoc(
+          targetRef,
+          cleanFirestoreObject({
+            lastLogin: new Date().toISOString(),
+            photoURL: user.photoURL || data.photoURL || null,
+            displayName: data.displayName || user.displayName || 'Authorized User',
+          })
+        );
 
+        setCurrentUser({
+          uid: profile.uid,
+          email: profile.email,
+          displayName: profile.displayName,
+          photoURL: profile.photoURL,
+        });
         setUserProfile(profile);
         localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(profile));
+        return { success: true };
       } else {
-        const isMasterAdmin = (user.email || '').toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+        const uid = user.uid;
         const newProfileData: Record<string, any> = {
-          uid: user.uid,
-          email: user.email || '',
-          displayName: user.displayName || user.email?.split('@')[0] || 'Vijaya Staff',
+          uid,
+          email: cleanEmail,
+          displayName: user.displayName || cleanEmail.split('@')[0] || 'Vijaya Staff',
           role: isMasterAdmin ? 'admin' : 'staff',
           approvalStatus: isMasterAdmin ? 'approved' : 'pending',
           isApproved: isMasterAdmin,
@@ -157,30 +200,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         await setDoc(userDocRef, cleanFirestoreObject(newProfileData));
 
+        if (!isMasterAdmin) {
+          try {
+            await setDoc(
+              doc(db, 'user_approvals', uid),
+              cleanFirestoreObject({
+                id: uid,
+                uid,
+                email: cleanEmail,
+                displayName: newProfileData.displayName,
+                role: 'staff',
+                requestedAt: new Date().toISOString(),
+                status: 'pending',
+                photoURL: user.photoURL || null,
+              })
+            );
+          } catch (appErr) {
+            console.warn('Could not record approval document:', appErr);
+          }
+
+          localStorage.removeItem(LOCAL_SESSION_KEY);
+          setCurrentUser(null);
+          setUserProfile(null);
+          return {
+            success: false,
+            isPendingApproval: true,
+            pendingEmail: cleanEmail,
+            pendingName: newProfileData.displayName,
+            error: `Your account is pending administrator approval. An email notification has been dispatched to ${MASTER_ADMIN_EMAIL}.`,
+          };
+        }
+
         const newProfile: AppUserProfile = {
-          uid: user.uid,
-          email: user.email,
+          uid,
+          email: cleanEmail,
           displayName: newProfileData.displayName,
-          role: newProfileData.role,
+          role: 'admin',
           photoURL: user.photoURL || null,
-          approvalStatus: newProfileData.approvalStatus,
-          isApproved: isMasterAdmin,
+          approvalStatus: 'approved',
+          isApproved: true,
           createdAt: newProfileData.createdAt,
           lastLogin: newProfileData.lastLogin,
         };
 
-        if (!isMasterAdmin) {
-          localStorage.removeItem(LOCAL_SESSION_KEY);
-          setCurrentUser(null);
-          setUserProfile(null);
-          return;
-        }
-
+        setCurrentUser({
+          uid,
+          email: cleanEmail,
+          displayName: newProfile.displayName,
+          photoURL: newProfile.photoURL,
+        });
         setUserProfile(newProfile);
         localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(newProfile));
+        return { success: true };
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Could not sync user profile in Firestore:', err);
+      return { success: false, error: err.message || 'Profile synchronization error.' };
     }
   };
 
@@ -486,8 +561,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         displayName: user.displayName,
         photoURL: user.photoURL,
       };
-      await syncUserProfile(authUser);
-      return { success: true };
+      return await syncUserProfile(authUser);
     } catch (err: any) {
       console.warn('Google sign-in error:', err);
       let errorMsg = err.message || 'Google sign in failed.';
@@ -495,6 +569,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         errorMsg = 'Popup was blocked by the browser. Please allow popups or open the app in a new tab.';
       } else if (err.code === 'auth/popup-closed-by-user') {
         errorMsg = 'Sign in was cancelled.';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        errorMsg = 'Domain not authorized in Firebase. Please ensure the domain is listed under Firebase Authentication Authorized Domains.';
       }
       return { success: false, error: errorMsg };
     }
@@ -570,12 +646,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
       const snap = await getDocs(q);
-      if (!snap.empty) {
-        for (const d of snap.docs) {
-          await updateDoc(d.ref, {
-            passwordHash: newHash,
-            updatedAt: new Date().toISOString(),
-          });
+      let docsToUpdate = snap.docs;
+      if (snap.empty) {
+        const allUsersSnap = await getDocs(collection(db, 'users'));
+        docsToUpdate = allUsersSnap.docs.filter((d) => {
+          const data = d.data();
+          return (data.email || '').trim().toLowerCase() === cleanEmail;
+        });
+      }
+
+      if (docsToUpdate.length > 0) {
+        for (const d of docsToUpdate) {
+          await updateDoc(
+            d.ref,
+            cleanFirestoreObject({
+              passwordHash: newHash,
+              updatedAt: new Date().toISOString(),
+            })
+          );
         }
       } else {
         const isMaster = cleanEmail === MASTER_ADMIN_EMAIL.toLowerCase();
@@ -657,13 +745,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
       const snap = await getDocs(q);
 
-      if (!snap.empty) {
-        for (const d of snap.docs) {
-          await updateDoc(d.ref, {
+      let docsToUpdate = snap.docs;
+      if (snap.empty) {
+        // Fallback: check all docs in users collection case-insensitively
+        const allUsersSnap = await getDocs(collection(db, 'users'));
+        docsToUpdate = allUsersSnap.docs.filter((d) => {
+          const data = d.data();
+          return (data.email || '').trim().toLowerCase() === cleanEmail;
+        });
+      }
+
+      if (docsToUpdate.length > 0) {
+        for (const d of docsToUpdate) {
+          const updatePayload: Record<string, any> = {
             passwordHash: newHash,
             updatedAt: new Date().toISOString(),
-            isApproved: isMaster ? true : undefined,
-          });
+          };
+          if (isMaster) {
+            updatePayload.isApproved = true;
+            updatePayload.approvalStatus = 'approved';
+          }
+          await updateDoc(d.ref, cleanFirestoreObject(updatePayload));
         }
       } else if (isMaster) {
         const uid = 'usr_' + Date.now().toString(36);

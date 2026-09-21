@@ -17,6 +17,7 @@ import { ExportCenterModal } from './components/ExportCenterModal';
 import { FirebaseStatusModal } from './components/FirebaseStatusModal';
 import { UserApprovalsModal } from './components/UserApprovalsModal';
 import { AuthScreen } from './components/AuthScreen';
+import dashboardForestBg from './assets/images/dashboard_forest_bg.jpg';
 import { AuthProvider, useAuth, MASTER_ADMIN_EMAIL } from './context/AuthContext';
 import { firestoreService, DEFAULT_ROOTS } from './services/firestoreService';
 import { api } from './services/api';
@@ -418,9 +419,21 @@ function MainApp() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex antialiased">
+    <div className="relative min-h-screen bg-stone-100/70 text-slate-900 font-sans flex antialiased overflow-x-hidden">
+      {/* Background Forest & Deers Wallpaper for the Web Dashboard */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <img
+          src={dashboardForestBg}
+          alt="Vintage Forest Wallpaper"
+          referrerPolicy="no-referrer"
+          className="w-full h-full object-cover object-center scale-100"
+        />
+        {/* Soft, warm subtle overlay preserving the aesthetic forest trees and deer while ensuring great readability */}
+        <div className="absolute inset-0 bg-stone-100/70 backdrop-blur-[0.5px]" />
+      </div>
+
       {/* Desktop Navigation Sidebar */}
-      <div className="hidden lg:block">
+      <div className="relative z-10 hidden lg:block">
         <Sidebar
           activeScreen={activeScreen}
           onNavigate={(screen) => {
@@ -446,7 +459,7 @@ function MainApp() {
       </div>
 
       {/* Main Container */}
-      <div className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-8">
+      <div className="relative z-10 flex-1 flex flex-col min-w-0 pb-20 lg:pb-8">
         {/* Mobile Header */}
         <Navbar
           isSyncing={isSyncing}

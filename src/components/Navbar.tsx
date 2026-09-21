@@ -23,7 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isAdmin = userProfile?.role === 'admin' || (currentUser?.email || '').toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 lg:hidden">
+    <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-stone-200/80 lg:hidden shadow-xs">
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center space-x-2.5">
           <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs">
