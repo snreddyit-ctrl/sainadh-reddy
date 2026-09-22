@@ -22,6 +22,7 @@ import {
   Key,
   ShieldCheck,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 import { Invoice } from '../types';
 import { downloadRootPendingBillsCsv } from '../utils/exportBills';
@@ -66,24 +67,43 @@ export const ExportCenterModal: React.FC<ExportCenterModalProps> = ({
   const [smtpPassInput, setSmtpPassInput] = useState('');
   const [isSavingSmtp, setIsSavingSmtp] = useState(false);
 
+  // Overdue & Catch-up State
+  const [isCatchingUp, setIsCatchingUp] = useState(false);
+  const [lastDispatchedDate, setLastDispatchedDate] = useState<string | null>(null);
+  const [isOverdue, setIsOverdue] = useState(false);
+  const [overdueReason, setOverdueReason] = useState<string | null>(null);
+  const [overdueDate, setOverdueDate] = useState<string | null>(null);
+
+  const fetchEmailStatus = React.useCallback(() => {
+    fetch('/api/reports/email-status')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.recipientEmail) setRecipientEmail(data.recipientEmail);
+        if (data && data.scheduleTime) setScheduleTime(data.scheduleTime);
+        if (data && typeof data.isSmtpConfigured === 'boolean') {
+          setIsSmtpConfigured(data.isSmtpConfigured);
+        }
+        if (data && data.smtpUser) {
+          setSmtpUser(data.smtpUser);
+        }
+        if (data && data.lastDispatchedDate) {
+          setLastDispatchedDate(data.lastDispatchedDate);
+        }
+        if (data && typeof data.isOverdue === 'boolean') {
+          setIsOverdue(data.isOverdue);
+          setOverdueReason(data.overdueReason || null);
+          setOverdueDate(data.overdueDate || null);
+        }
+      })
+      .catch((e) => console.error('Error fetching email schedule status:', e));
+  }, []);
+
   // Load active schedule settings from server
   React.useEffect(() => {
     if (isOpen) {
-      fetch('/api/reports/email-status')
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && data.recipientEmail) setRecipientEmail(data.recipientEmail);
-          if (data && data.scheduleTime) setScheduleTime(data.scheduleTime);
-          if (data && typeof data.isSmtpConfigured === 'boolean') {
-            setIsSmtpConfigured(data.isSmtpConfigured);
-          }
-          if (data && data.smtpUser) {
-            setSmtpUser(data.smtpUser);
-          }
-        })
-        .catch((e) => console.error('Error fetching email schedule status:', e));
+      fetchEmailStatus();
     }
-  }, [isOpen]);
+  }, [isOpen, fetchEmailStatus]);
 
   if (!isOpen) return null;
 
@@ -207,6 +227,48 @@ export const ExportCenterModal: React.FC<ExportCenterModalProps> = ({
       });
     } finally {
       setIsSendingEmail(false);
+    }
+  };
+
+  const handleCheckAndCatchUp = async () => {
+    try {
+      setIsCatchingUp(true);
+      setEmailNotice(null);
+      const res = await fetch('/api/reports/check-and-dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          force: false,
+          invoices: invoices,
+          source: 'manual_catchup_click',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.ran) {
+        setEmailNotice({
+          type: 'success',
+          text: `Catch-up dispatched successfully! Emailed daily Excel report for ${data.targetReportDate} to ${recipientEmail}.`,
+        });
+        fetchEmailStatus();
+      } else if (data.success && !data.ran) {
+        setEmailNotice({
+          type: 'info',
+          text: data.message || 'All daily backup emails are already up to date!',
+        });
+        fetchEmailStatus();
+      } else {
+        setEmailNotice({
+          type: 'error',
+          text: data.message || 'Catch-up check failed. Please check your Gmail App Password.',
+        });
+      }
+    } catch (err: any) {
+      setEmailNotice({
+        type: 'error',
+        text: err.message || 'Error executing catch-up job.',
+      });
+    } finally {
+      setIsCatchingUp(false);
     }
   };
 
@@ -361,6 +423,11 @@ export const ExportCenterModal: React.FC<ExportCenterModalProps> = ({
                       <Clock className="w-3 h-3" />
                       Daily at {scheduleTime}
                     </span>
+                    {lastDispatchedDate && (
+                      <span className="text-[10px] bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 px-2 py-0.5 rounded font-mono">
+                        Last Sent: {lastDispatchedDate}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-indigo-200 mt-0.5">
                     Automated email dispatch containing complete <strong>.xlsx Excel workbook</strong> (All Invoices, Executive Summary & Route Breakdown) to <strong>{recipientEmail || 'snreddy.it@gmail.com'}</strong>.
@@ -368,6 +435,28 @@ export const ExportCenterModal: React.FC<ExportCenterModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Overdue Catch-up Notice & Action */}
+            {isOverdue && (
+              <div className="mt-3 p-3 rounded-lg bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-fadeIn">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-amber-300">Missed Report Detected: </span>
+                    <span>{overdueReason || `Backup for ${overdueDate} was pending.`}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCheckAndCatchUp}
+                  disabled={isCatchingUp}
+                  className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs tracking-wide shrink-0 transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCatchingUp ? 'animate-spin' : ''}`} />
+                  <span>{isCatchingUp ? 'Dispatching...' : 'Send Missed Report Now'}</span>
+                </button>
+              </div>
+            )}
 
             {/* Email Dispatch Notice */}
             {emailNotice && (

@@ -25,5 +25,10 @@ service cloud.firestore {
     match /roots/{rootId} {
       allow read, write: if true;
     }
+
+    // System configuration (email schedules, SMTP config, sync metadata)
+    match /system_config/{configId} {
+      allow read, write: if true;
+    }
   }
 }

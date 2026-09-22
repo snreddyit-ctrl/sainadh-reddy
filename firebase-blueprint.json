@@ -156,6 +156,20 @@
         }
       },
       "required": ["name"]
+    },
+    "SystemConfig": {
+      "title": "SystemConfig",
+      "description": "System settings, email schedules, SMTP configuration, and dispatch history",
+      "type": "object",
+      "properties": {
+        "recipientEmail": { "type": "string" },
+        "scheduleTime": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "smtpUser": { "type": "string" },
+        "smtpPass": { "type": "string" },
+        "lastDispatchedDate": { "type": "string" },
+        "lastDispatchedTimestamp": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -174,6 +188,10 @@
     "/roots/{rootId}": {
       "schema": "Root",
       "description": "Master list of delivery routes"
+    },
+    "/system_config/{configId}": {
+      "schema": "SystemConfig",
+      "description": "System configuration and automated email state"
     }
   }
 }

@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 
 export const firebaseConfig = {
@@ -16,9 +16,16 @@ export const firestoreDatabaseId = 'ai-studio-vijayaagencies-59b16443-c543-4497-
 // Initialize or retrieve Firebase app
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Firebase Authentication
+// Firebase Authentication with strict session-only persistence
 export const auth = getAuth(app);
 export const googleAuthProvider = new GoogleAuthProvider();
+
+// Enforce session persistence so closing the tab, browser, or app automatically signs out
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserSessionPersistence).catch((err) => {
+    console.warn('Firebase session persistence configuration:', err);
+  });
+}
 
 // Cloud Firestore instance bound to the applet database ID
 const dbId = firestoreDatabaseId as string | undefined;

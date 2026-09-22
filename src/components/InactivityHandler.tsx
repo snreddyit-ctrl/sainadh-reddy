@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Clock, ShieldAlert, LogOut, CheckCircle2 } from 'lucide-react';
+import { Clock, LogOut, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 // 5 minutes of inactivity limit (in milliseconds)
 const INACTIVITY_LIMIT_MS = 5 * 60 * 1000;
-// Warning shows 30 seconds before auto logout
+// Warning shows 30 seconds before auto logout (at 4m 30s)
 const WARNING_THRESHOLD_MS = 30 * 1000;
 const STORAGE_KEY = 'va_last_activity_timestamp';
 export const INACTIVITY_NOTICE_KEY = 'va_inactivity_logout_notice';
@@ -16,20 +16,8 @@ export const InactivityHandler: React.FC = () => {
 
   const lastActivityRef = useRef<number>(Date.now());
   const isLoggingOutRef = useRef<boolean>(false);
-
-  // Record user activity
-  const recordActivity = useCallback(() => {
-    const now = Date.now();
-    lastActivityRef.current = now;
-    try {
-      localStorage.setItem(STORAGE_KEY, String(now));
-    } catch {
-      // ignore local storage errors
-    }
-
-    // Dismiss warning if user resumed interaction
-    setShowWarning((prev) => (prev ? false : false));
-  }, []);
+  const logoutRef = useRef(logout);
+  logoutRef.current = logout;
 
   // Force sign out due to inactivity
   const handleAutoLogout = useCallback(async () => {
@@ -39,29 +27,101 @@ export const InactivityHandler: React.FC = () => {
 
     try {
       sessionStorage.setItem(INACTIVITY_NOTICE_KEY, 'true');
+      sessionStorage.removeItem(STORAGE_KEY);
     } catch {
       // ignore
     }
 
     try {
-      await logout();
+      await logoutRef.current();
     } catch (err) {
       console.warn('Error during automatic inactivity sign out:', err);
     }
-  }, [logout]);
+  }, []);
 
-  useEffect(() => {
-    if (!currentUser) return;
-
-    // Initialize timestamps
+  // Explicit user confirmation to stay signed in
+  const handleStaySignedIn = useCallback(() => {
     const now = Date.now();
     lastActivityRef.current = now;
     try {
-      localStorage.setItem(STORAGE_KEY, String(now));
+      sessionStorage.setItem(STORAGE_KEY, String(now));
     } catch {
       // ignore
     }
+    setShowWarning(false);
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setShowWarning(false);
+      return;
+    }
+
     isLoggingOutRef.current = false;
+
+    // Check if there is an existing activity timestamp from this session
+    let initialTimestamp = Date.now();
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = Number(stored);
+        if (!isNaN(parsed) && parsed > 0) {
+          const elapsed = Date.now() - parsed;
+          if (elapsed >= INACTIVITY_LIMIT_MS) {
+            // Already expired before mount
+            handleAutoLogout();
+            return;
+          }
+          initialTimestamp = parsed;
+        }
+      } else {
+        sessionStorage.setItem(STORAGE_KEY, String(initialTimestamp));
+      }
+    } catch {
+      // ignore
+    }
+
+    lastActivityRef.current = initialTimestamp;
+
+    // Interaction handler with expiration guard
+    let lastThrottledCall = 0;
+    const handleUserInteraction = () => {
+      const now = Date.now();
+      // Throttle to at most once per 500ms
+      if (now - lastThrottledCall < 500) return;
+      lastThrottledCall = now;
+
+      // CRITICAL: Check if already expired before recording new activity!
+      // This prevents someone who has been away for > 5 min from resetting the timer by moving the mouse.
+      let last = lastActivityRef.current;
+      try {
+        const stored = sessionStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = Number(stored);
+          if (!isNaN(parsed)) last = parsed;
+        }
+      } catch {
+        // ignore
+      }
+
+      const elapsed = now - last;
+      if (elapsed >= INACTIVITY_LIMIT_MS) {
+        // Inactive for 5+ minutes: trigger sign-out immediately without resetting timestamp
+        handleAutoLogout();
+        return;
+      }
+
+      // Valid activity within the 5-minute window: update timestamp
+      lastActivityRef.current = now;
+      try {
+        sessionStorage.setItem(STORAGE_KEY, String(now));
+      } catch {
+        // ignore
+      }
+
+      // If warning was active and user interacted, dismiss warning
+      setShowWarning(false);
+    };
 
     // Interaction events to detect user activity
     const activityEvents: (keyof WindowEventMap)[] = [
@@ -75,54 +135,52 @@ export const InactivityHandler: React.FC = () => {
       'click',
     ];
 
-    // Throttled event listener to avoid excessive state updates
-    let lastThrottledCall = 0;
-    const throttledHandler = () => {
-      const current = Date.now();
-      if (current - lastThrottledCall > 1000) {
-        lastThrottledCall = current;
-        recordActivity();
-      }
-    };
-
     activityEvents.forEach((eventName) => {
-      window.addEventListener(eventName, throttledHandler, { passive: true });
+      window.addEventListener(eventName, handleUserInteraction, { passive: true });
     });
 
-    // Cross-tab synchronization via localStorage changes
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY && e.newValue) {
-        const remoteTimestamp = Number(e.newValue);
-        if (!isNaN(remoteTimestamp) && remoteTimestamp > lastActivityRef.current) {
-          lastActivityRef.current = remoteTimestamp;
-          setShowWarning(false);
+    // Visibility change and focus: verify expiration immediately when user re-focuses tab
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible' || document.hasFocus()) {
+        const now = Date.now();
+        let last = lastActivityRef.current;
+        try {
+          const stored = sessionStorage.getItem(STORAGE_KEY);
+          if (stored) {
+            const parsed = Number(stored);
+            if (!isNaN(parsed)) last = parsed;
+          }
+        } catch {
+          // ignore
         }
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
 
-    // Visibility change / tab focus: immediately check if expired while backgrounded
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        const stored = Number(localStorage.getItem(STORAGE_KEY) || lastActivityRef.current);
-        const elapsed = Date.now() - (isNaN(stored) ? lastActivityRef.current : stored);
+        const elapsed = now - last;
         if (elapsed >= INACTIVITY_LIMIT_MS) {
           handleAutoLogout();
-        } else {
-          lastActivityRef.current = stored;
         }
       }
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange);
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
 
     // Periodic ticker every 1 second to inspect idle duration
     const intervalTimer = setInterval(() => {
       if (isLoggingOutRef.current) return;
 
-      const stored = Number(localStorage.getItem(STORAGE_KEY) || lastActivityRef.current);
-      const effectiveLastActivity = isNaN(stored) ? lastActivityRef.current : Math.max(lastActivityRef.current, stored);
-      const elapsed = Date.now() - effectiveLastActivity;
+      const now = Date.now();
+      let last = lastActivityRef.current;
+      try {
+        const stored = sessionStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = Number(stored);
+          if (!isNaN(parsed)) last = parsed;
+        }
+      } catch {
+        // ignore
+      }
+
+      const elapsed = now - last;
       const timeLeftMs = INACTIVITY_LIMIT_MS - elapsed;
 
       if (timeLeftMs <= 0) {
@@ -138,14 +196,13 @@ export const InactivityHandler: React.FC = () => {
 
     return () => {
       activityEvents.forEach((eventName) => {
-        window.removeEventListener(eventName, throttledHandler);
+        window.removeEventListener(eventName, handleUserInteraction);
       });
-      window.removeEventListener('storage', handleStorageChange);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
       clearInterval(intervalTimer);
     };
-  }, [currentUser, handleAutoLogout, recordActivity]);
+  }, [currentUser, handleAutoLogout]);
 
   if (!showWarning) {
     return null;
@@ -184,7 +241,7 @@ export const InactivityHandler: React.FC = () => {
         <div className="flex items-center space-x-2 pt-1">
           <button
             type="button"
-            onClick={recordActivity}
+            onClick={handleStaySignedIn}
             className="flex-1 py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
           >
             <CheckCircle2 className="w-4 h-4" />

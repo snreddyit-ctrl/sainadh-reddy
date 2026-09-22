@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -76,7 +76,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const LOCAL_SESSION_KEY = 'va_firebase_auth_session';
+const SESSION_KEY = 'va_session_auth_profile';
+const LEGACY_STORAGE_KEY = 'va_firebase_auth_session';
 
 function cleanFirestoreObject<T extends Record<string, any>>(obj: T): Record<string, any> {
   const result: Record<string, any> = {};
@@ -125,7 +126,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (data) {
         if (data.approvalStatus === 'rejected') {
-          localStorage.removeItem(LOCAL_SESSION_KEY);
+          sessionStorage.removeItem(SESSION_KEY);
+          try {
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
+          } catch {
+            // ignore
+          }
           setCurrentUser(null);
           setUserProfile(null);
           return {
@@ -138,7 +144,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const approvalStatus = isMasterAdmin ? 'approved' : (data.approvalStatus || (isApproved ? 'approved' : 'pending'));
 
         if (!isApproved) {
-          localStorage.removeItem(LOCAL_SESSION_KEY);
+          sessionStorage.removeItem(SESSION_KEY);
+          try {
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
+          } catch {
+            // ignore
+          }
           setCurrentUser(null);
           setUserProfile(null);
           return {
@@ -180,7 +191,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           photoURL: profile.photoURL,
         });
         setUserProfile(profile);
-        localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(profile));
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(profile));
+        sessionStorage.setItem('va_last_activity_timestamp', String(Date.now()));
+        try {
+          localStorage.removeItem(LEGACY_STORAGE_KEY);
+        } catch {
+          // ignore
+        }
         return { success: true };
       } else {
         const uid = user.uid;
@@ -219,7 +236,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.warn('Could not record approval document:', appErr);
           }
 
-          localStorage.removeItem(LOCAL_SESSION_KEY);
+          sessionStorage.removeItem(SESSION_KEY);
+          try {
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
+          } catch {
+            // ignore
+          }
           setCurrentUser(null);
           setUserProfile(null);
           return {
@@ -250,7 +272,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           photoURL: newProfile.photoURL,
         });
         setUserProfile(newProfile);
-        localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(newProfile));
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(newProfile));
+        sessionStorage.setItem('va_last_activity_timestamp', String(Date.now()));
+        try {
+          localStorage.removeItem(LEGACY_STORAGE_KEY);
+        } catch {
+          // ignore
+        }
         return { success: true };
       }
     } catch (err: any) {
@@ -268,12 +296,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Check local cached session first
+    // Purge any legacy localStorage session from previous versions
     try {
-      const saved = localStorage.getItem(LOCAL_SESSION_KEY);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+
+    // 1. Check tab/window sessionStorage (persists across page reloads, but destroyed on app/tab close)
+    let hasValidSession = false;
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY);
       if (saved) {
         const parsed: AppUserProfile = JSON.parse(saved);
         if (parsed && parsed.uid && parsed.email && parsed.isApproved !== false) {
+          hasValidSession = true;
           setCurrentUser({
             uid: parsed.uid,
             email: parsed.email,
@@ -282,7 +319,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           setUserProfile(parsed);
         } else {
-          localStorage.removeItem(LOCAL_SESSION_KEY);
+          sessionStorage.removeItem(SESSION_KEY);
         }
       }
     } catch (e) {
@@ -293,6 +330,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!isMounted) return;
       if (user) {
+        // If the tab was opened fresh after the app was closed, sessionStorage is empty!
+        // The user requirement specifies: "when ever i close the app, it automatically need to logout"
+        const activeSession = sessionStorage.getItem(SESSION_KEY);
+        if (!activeSession) {
+          // Cold start without active session -> sign out of Firebase
+          try {
+            await signOut(auth);
+          } catch {
+            // ignore
+          }
+          if (isMounted) {
+            setCurrentUser(null);
+            setUserProfile(null);
+            setLoading(false);
+          }
+          return;
+        }
+
         const authUser: AuthUser = {
           uid: user.uid,
           email: user.email,
@@ -300,6 +355,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           photoURL: user.photoURL,
         };
         await syncUserProfile(authUser);
+      } else if (!hasValidSession) {
+        setCurrentUser(null);
+        setUserProfile(null);
       }
       setLoading(false);
     });
@@ -390,7 +448,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setCurrentUser(authUser);
         setUserProfile(newProfile);
-        localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(newProfile));
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(newProfile));
+        sessionStorage.setItem('va_last_activity_timestamp', String(Date.now()));
+        try {
+          localStorage.removeItem(LEGACY_STORAGE_KEY);
+        } catch {
+          // ignore
+        }
         return { success: true, isPendingApproval: false };
       }
 
@@ -431,7 +495,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Clean session to ensure user cannot access without approval
       setCurrentUser(null);
       setUserProfile(null);
-      localStorage.removeItem(LOCAL_SESSION_KEY);
+      sessionStorage.removeItem(SESSION_KEY);
+      try {
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
 
       return {
         success: true,
@@ -536,7 +605,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await updateDoc(userDoc.ref, { lastLogin: new Date().toISOString() });
         setCurrentUser(authUser);
         setUserProfile(profile);
-        localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(profile));
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(profile));
+        sessionStorage.setItem('va_last_activity_timestamp', String(Date.now()));
+        try {
+          localStorage.removeItem(LEGACY_STORAGE_KEY);
+        } catch {
+          // ignore
+        }
         return { success: true };
       }
 
@@ -576,17 +651,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // LOGOUT
-  const logout = async () => {
+  // LOGOUT (clears session-only persistence so user is completely logged out)
+  const logout = useCallback(async () => {
     try {
       await signOut(auth);
     } catch (e) {
       // ignore
     }
-    localStorage.removeItem(LOCAL_SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem('va_last_activity_timestamp');
+    try {
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
     setCurrentUser(null);
     setUserProfile(null);
-  };
+  }, []);
 
   // EXTRACT OOB CODE HELPER
   const extractOobCode = (codeOrLink: string): string => {

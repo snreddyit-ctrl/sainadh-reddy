@@ -132,6 +132,35 @@ function MainApp() {
     };
   }, [currentUser, isAdmin]);
 
+  // Automated background catch-up check for Daily Email Report
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const checkReportJob = () => {
+      fetch('/api/reports/check-and-dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: false, source: 'client_active_ping' }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.ran) {
+            console.log('📬 [AUTOMATED EMAIL DISPATCH TRIGGERED]:', data.message);
+          }
+        })
+        .catch((e) => console.warn('Background report check notice:', e));
+    };
+
+    // Run after initial 4 seconds so data is ready, and then every 15 minutes
+    const timer = setTimeout(checkReportJob, 4000);
+    const interval = setInterval(checkReportJob, 15 * 60 * 1000);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [currentUser]);
+
   // Refresh Firestore
   const handleForceSync = async () => {
     setIsSyncing(true);

@@ -6,6 +6,20 @@ import JSZip from 'jszip';
 import { createServer as createViteServer } from 'vite';
 import * as XLSX from 'xlsx';
 import nodemailer from 'nodemailer';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, doc, getDoc, setDoc, getDocs, collection } from 'firebase/firestore';
+
+const firebaseConfig = {
+  projectId: 'silver-charger-bnm8c',
+  appId: '1:1016629170879:web:ff21c507dc0da5ad29ec0a',
+  apiKey: 'AIzaSyCdRohbAhFGlAl780FuJXpSgsec005htYY',
+  authDomain: 'silver-charger-bnm8c.firebaseapp.com',
+  storageBucket: 'silver-charger-bnm8c.firebasestorage.app',
+  messagingSenderId: '1016629170879',
+};
+const firestoreDatabaseId = 'ai-studio-vijayaagencies-59b16443-c543-4497-a710-4f99f6149ce7';
+const fbApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const db = getFirestore(fbApp, firestoreDatabaseId);
 
 interface Invoice {
   billNo: string;
@@ -52,6 +66,8 @@ interface AppData {
     recipientEmail: string;
     scheduleTime: string; // "23:30"
     enabled: boolean;
+    lastDispatchedDate?: string;
+    lastDispatchedTimestamp?: string;
   };
   smtpConfig?: {
     user: string;
@@ -114,6 +130,19 @@ function loadData(): AppData {
       const loaded: AppData = { ...DEFAULT_DATA, ...JSON.parse(content) };
       if (!loaded.auth || !loaded.auth.passwordHash) {
         loaded.auth = { ...DEFAULT_AUTH };
+      }
+      if (typeof appData !== 'undefined') {
+        if (appData.smtpConfig && !loaded.smtpConfig) {
+          loaded.smtpConfig = appData.smtpConfig;
+        }
+        if (appData.reportConfig && loaded.reportConfig) {
+          if (appData.reportConfig.lastDispatchedDate && !loaded.reportConfig.lastDispatchedDate) {
+            loaded.reportConfig.lastDispatchedDate = appData.reportConfig.lastDispatchedDate;
+          }
+          if (appData.reportConfig.lastDispatchedTimestamp && !loaded.reportConfig.lastDispatchedTimestamp) {
+            loaded.reportConfig.lastDispatchedTimestamp = appData.reportConfig.lastDispatchedTimestamp;
+          }
+        }
       }
       return loaded;
     }
@@ -1081,7 +1110,7 @@ async function startServer() {
   });
 
   // ----------------------------------------------------
-  // DAILY INVOICES EXCEL ATTACHMENT & EMAIL SERVICE
+  // DAILY INVOICES EXCEL ATTACHMENT & EMAIL SERVICE (WITH FIRESTORE & CATCH-UP)
   // ----------------------------------------------------
   interface DailyReportDispatchRecord {
     timestamp: string;
@@ -1094,7 +1123,7 @@ async function startServer() {
   }
 
   let lastReportDispatch: DailyReportDispatchRecord | null = null;
-  let lastMidnightCronDate: string = '';
+  let isReportRunning = false;
 
   function generateInvoicesExcelBuffer(invoices: Invoice[]): Buffer {
     const wb = XLSX.utils.book_new();
@@ -1172,22 +1201,132 @@ async function startServer() {
     return buf as Buffer;
   }
 
+  // Fetch live invoices from Firestore
+  async function fetchLiveInvoicesFromFirestore(): Promise<Invoice[]> {
+    try {
+      const snap = await getDocs(collection(db, 'invoices'));
+      if (!snap.empty) {
+        const fetched: Invoice[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const billAmount = Number(data.billAmount) || 0;
+          const amountPaid = Number(data.amountPaid) || 0;
+          const { amountPending, status } = calculatePendingAndStatus(billAmount, amountPaid);
+          fetched.push({
+            billNo: String(data.billNo || '').trim(),
+            root: String(data.root || ''),
+            billDate: String(data.date || data.billDate || ''),
+            billAmount,
+            amountPaid,
+            amountPending,
+            status,
+            updatedAt: data.updatedAt || new Date().toISOString(),
+          });
+        });
+        if (fetched.length > 0) {
+          appData.invoices = fetched;
+          saveData(appData);
+          console.log(`📋 [INVOICES] Loaded ${fetched.length} live invoices from Firestore for daily report`);
+          return fetched;
+        }
+      }
+    } catch (err: any) {
+      console.error('Error fetching live invoices from Firestore:', err.message);
+    }
+    return appData.invoices || [];
+  }
+
+  // Load persistent system & SMTP configuration from Firestore
+  async function loadSystemConfigFromFirestore(): Promise<void> {
+    try {
+      const configDoc = await getDoc(doc(db, 'system_config', 'email_report'));
+      if (configDoc.exists()) {
+        const data = configDoc.data();
+        if (!appData.reportConfig) {
+          appData.reportConfig = {
+            recipientEmail: 'snreddy.it@gmail.com',
+            scheduleTime: '23:30',
+            enabled: true,
+          };
+        }
+        if (data.recipientEmail) appData.reportConfig.recipientEmail = String(data.recipientEmail).trim();
+        if (data.scheduleTime) appData.reportConfig.scheduleTime = String(data.scheduleTime).trim();
+        if (typeof data.enabled === 'boolean') appData.reportConfig.enabled = data.enabled;
+        if (data.lastDispatchedDate) appData.reportConfig.lastDispatchedDate = String(data.lastDispatchedDate).trim();
+        if (data.lastDispatchedTimestamp) appData.reportConfig.lastDispatchedTimestamp = String(data.lastDispatchedTimestamp).trim();
+
+        if (data.smtpUser && data.smtpPass) {
+          appData.smtpConfig = {
+            user: String(data.smtpUser).trim(),
+            pass: String(data.smtpPass).trim(),
+            host: data.smtpHost || 'smtp.gmail.com',
+            port: Number(data.smtpPort) || 465,
+          };
+        }
+        if (data.lastDispatch) {
+          lastReportDispatch = data.lastDispatch;
+        }
+        saveData(appData);
+        console.log('✅ [CONFIG] System email & SMTP configuration loaded from Firestore.');
+      } else {
+        const initialConfig = {
+          recipientEmail: appData.reportConfig?.recipientEmail || 'snreddy.it@gmail.com',
+          scheduleTime: appData.reportConfig?.scheduleTime || '23:30',
+          enabled: appData.reportConfig?.enabled !== false,
+          smtpUser: appData.smtpConfig?.user || process.env.SMTP_USER || '',
+          smtpPass: appData.smtpConfig?.pass || process.env.SMTP_PASS || '',
+          smtpHost: appData.smtpConfig?.host || process.env.SMTP_HOST || 'smtp.gmail.com',
+          smtpPort: Number(appData.smtpConfig?.port || process.env.SMTP_PORT) || 465,
+          lastDispatchedDate: appData.reportConfig?.lastDispatchedDate || '',
+          lastDispatchedTimestamp: appData.reportConfig?.lastDispatchedTimestamp || '',
+        };
+        await setDoc(doc(db, 'system_config', 'email_report'), initialConfig, { merge: true });
+        console.log('💾 [CONFIG] Initialized system_config/email_report in Firestore.');
+      }
+    } catch (err: any) {
+      console.error('Error loading system_config from Firestore:', err.message);
+    }
+  }
+
+  // Save persistent system & SMTP configuration to Firestore
+  async function saveSystemConfigToFirestore(updates: any): Promise<void> {
+    try {
+      const payload: any = { ...updates, updatedAt: new Date().toISOString() };
+      await setDoc(doc(db, 'system_config', 'email_report'), payload, { merge: true });
+      console.log('💾 [CONFIG] Saved email & SMTP configuration to Firestore system_config/email_report');
+    } catch (err: any) {
+      console.error('Error saving system_config to Firestore:', err.message);
+    }
+  }
+
   async function sendDailyInvoicesEmail(
     invoices: Invoice[],
-    customRecipient?: string
+    customRecipient?: string,
+    targetDateStr?: string
   ): Promise<{ success: boolean; message: string; mode: 'smtp' | 'log' | 'apps-script' | 'unconfigured'; filename: string }> {
     const recipient = (
       customRecipient ||
+      appData.reportConfig?.recipientEmail ||
       process.env.DAILY_REPORT_EMAIL ||
       'snreddy.it@gmail.com'
     ).trim();
-    const dateStr = new Date().toISOString().slice(0, 10);
-    const excelBuffer = generateInvoicesExcelBuffer(invoices);
+
+    // Ensure we have invoices from Firestore if empty
+    let invoiceList = invoices;
+    if (!invoiceList || invoiceList.length === 0) {
+      invoiceList = await fetchLiveInvoicesFromFirestore();
+    }
+
+    const now = new Date();
+    const currentIstDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const dateStr = targetDateStr || currentIstDate;
+    const isCatchUp = targetDateStr && targetDateStr < currentIstDate;
+    const excelBuffer = generateInvoicesExcelBuffer(invoiceList);
     const filename = `VIJAYA_AGENCIES_Daily_Invoices_${dateStr}.xlsx`;
 
-    const totalBillAmount = invoices.reduce((s, i) => s + (Number(i.billAmount) || 0), 0);
-    const totalPaid = invoices.reduce((s, i) => s + (Number(i.amountPaid) || 0), 0);
-    const totalPending = invoices.reduce((s, i) => s + (Number(i.amountPending) || 0), 0);
+    const totalBillAmount = invoiceList.reduce((s, i) => s + (Number(i.billAmount) || 0), 0);
+    const totalPaid = invoiceList.reduce((s, i) => s + (Number(i.amountPaid) || 0), 0);
+    const totalPending = invoiceList.reduce((s, i) => s + (Number(i.amountPending) || 0), 0);
 
     const smtpHost = appData.smtpConfig?.host || process.env.SMTP_HOST || 'smtp.gmail.com';
     const smtpPort = Number(appData.smtpConfig?.port || process.env.SMTP_PORT) || 465;
@@ -1207,20 +1346,24 @@ async function startServer() {
           },
         });
 
+        const reportTitle = isCatchUp
+          ? `Daily Invoices & Collections Report (Catch-up for ${dateStr})`
+          : `Daily Invoices & Collections Report (${dateStr})`;
+
         const htmlBody = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
             <div style="background: #1e40af; color: white; padding: 24px; text-align: center;">
               <h1 style="margin: 0; font-size: 20px; letter-spacing: 1px;">VIJAYA AGENCIES</h1>
-              <p style="margin: 6px 0 0; font-size: 13px; opacity: 0.9;">Daily Invoices & Collections Report (${new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full' })})</p>
+              <p style="margin: 6px 0 0; font-size: 13px; opacity: 0.9;">${reportTitle}</p>
             </div>
             <div style="padding: 24px; background: #ffffff;">
               <p style="font-size: 14px; margin-top: 0;">Hello Administrator,</p>
-              <p style="font-size: 13px; color: #475569;">
-                Attached is your daily automatic Excel backup spreadsheet containing all registered distribution invoices, payment statuses, and route-wise breakdowns as of <strong>${new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full' })}</strong>.
+              <p style="font-size: 13px; color: #475569; line-height: 1.6;">
+                Attached is your daily automatic Excel backup spreadsheet containing all registered distribution invoices, payment statuses, and route-wise breakdowns as of <strong>${dateStr}</strong>${isCatchUp ? ' (Delivered via automated catch-up after server wake-up)' : ''}.
               </p>
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
                 <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
-                  <tr><td style="padding: 6px 0; color: #64748b;">Total Invoices:</td><td style="font-weight: bold; text-align: right;">${invoices.length}</td></tr>
+                  <tr><td style="padding: 6px 0; color: #64748b;">Total Invoices:</td><td style="font-weight: bold; text-align: right;">${invoiceList.length}</td></tr>
                   <tr><td style="padding: 6px 0; color: #64748b;">Total Bill Value:</td><td style="font-weight: bold; text-align: right;">₹${totalBillAmount.toLocaleString('en-IN')}</td></tr>
                   <tr><td style="padding: 6px 0; color: #15803d;">Collected Amount:</td><td style="font-weight: bold; color: #15803d; text-align: right;">₹${totalPaid.toLocaleString('en-IN')}</td></tr>
                   <tr style="border-top: 1px solid #cbd5e1;"><td style="padding: 8px 0; color: #b91c1c; font-weight: bold;">Outstanding Pending:</td><td style="font-weight: bold; color: #b91c1c; text-align: right;">₹${totalPending.toLocaleString('en-IN')}</td></tr>
@@ -1239,8 +1382,8 @@ async function startServer() {
         await transporter.sendMail({
           from: `"Vijaya Agencies" <${smtpUser}>`,
           to: recipient,
-          subject: `📊 VIJAYA AGENCIES - Daily Invoices Report (${dateStr})`,
-          text: `Vijaya Agencies Daily Invoice Report - ${invoices.length} invoices. Total Pending: ₹${totalPending}. Attached: ${filename}`,
+          subject: `📊 VIJAYA AGENCIES - Daily Invoices Report (${dateStr})${isCatchUp ? ' [Catch-up]' : ''}`,
+          text: `Vijaya Agencies Daily Invoice Report - ${invoiceList.length} invoices. Total Pending: ₹${totalPending}. Attached: ${filename}`,
           html: htmlBody,
           attachments: [
             {
@@ -1255,7 +1398,7 @@ async function startServer() {
         lastReportDispatch = {
           timestamp: new Date().toISOString(),
           recipient,
-          invoiceCount: invoices.length,
+          invoiceCount: invoiceList.length,
           totalPending,
           status: 'sent',
           mode: 'smtp',
@@ -1274,7 +1417,7 @@ async function startServer() {
         lastReportDispatch = {
           timestamp: new Date().toISOString(),
           recipient,
-          invoiceCount: invoices.length,
+          invoiceCount: invoiceList.length,
           totalPending,
           status: 'error',
           mode: 'smtp',
@@ -1300,7 +1443,7 @@ async function startServer() {
           lastReportDispatch = {
             timestamp: new Date().toISOString(),
             recipient,
-            invoiceCount: invoices.length,
+            invoiceCount: invoiceList.length,
             totalPending,
             status: 'sent',
             mode: 'apps-script',
@@ -1308,7 +1451,7 @@ async function startServer() {
           };
           return {
             success: true,
-            message: `Report successfully emailed to ${recipient} via connected Google Sheet with CSV attachment!`,
+            message: `Report successfully emailed to ${recipient} via connected Google Sheet!`,
             mode: 'apps-script',
             filename,
           };
@@ -1322,11 +1465,11 @@ async function startServer() {
     lastReportDispatch = {
       timestamp: new Date().toISOString(),
       recipient,
-      invoiceCount: invoices.length,
+      invoiceCount: invoiceList.length,
       totalPending,
       status: 'unconfigured',
       mode: 'unconfigured',
-      message: `Email was NOT sent because outgoing email is not yet configured. Please provide your Gmail App Password in Settings or update Google Apps Script in Google Sheets.`,
+      message: `Email was NOT sent because outgoing email is not yet configured. Please provide your Gmail App Password in Settings.`,
     };
 
     console.warn(
@@ -1335,11 +1478,153 @@ async function startServer() {
 
     return {
       success: false,
-      message: `Email was NOT sent yet because outgoing mail service is not configured. To receive real emails in your inbox, enter your 16-character Gmail App Password below, or run the trigger in Google Sheets.`,
+      message: `Email was NOT sent yet because outgoing mail service is not configured. Please enter your 16-character Gmail App Password below.`,
       mode: 'unconfigured',
       filename,
     };
   }
+
+  // Automated Scheduler Runner with Missed-Day Catch-Up
+  async function checkAndRunScheduledReport(options?: {
+    force?: boolean;
+    source?: string;
+    clientInvoices?: Invoice[];
+  }) {
+    if (isReportRunning) {
+      return { success: false, ran: false, message: 'Report dispatch already in progress.' };
+    }
+
+    // Ensure freshest config from Firestore
+    await loadSystemConfigFromFirestore();
+
+    const isEnabled = appData.reportConfig?.enabled !== false;
+    const targetTime = appData.reportConfig?.scheduleTime || '23:30';
+    const recipientEmail =
+      appData.reportConfig?.recipientEmail ||
+      process.env.DAILY_REPORT_EMAIL ||
+      'snreddy.it@gmail.com';
+
+    const smtpUser = appData.smtpConfig?.user || process.env.SMTP_USER;
+    const smtpPass = appData.smtpConfig?.pass || process.env.SMTP_PASS;
+    const isSmtpConfigured = !!(smtpUser && smtpPass);
+
+    const now = new Date();
+    const istDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // e.g. "2026-09-22"
+    const istTime = now.toLocaleTimeString('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+    }); // e.g. "08:52"
+
+    const yesterdayMs = now.getTime() - 24 * 60 * 60 * 1000;
+    const yesterdayIstDate = new Date(yesterdayMs).toLocaleDateString('en-CA', {
+      timeZone: 'Asia/Kolkata',
+    });
+
+    const lastDispatchedDate = appData.reportConfig?.lastDispatchedDate || '';
+
+    let shouldRun = false;
+    let targetReportDate = istDate;
+    let reason = '';
+
+    if (options?.force) {
+      shouldRun = true;
+      targetReportDate = istDate;
+      reason = `Manual trigger (${options.source || 'user_action'})`;
+    } else if (!isEnabled) {
+      return { success: false, ran: false, message: 'Automated email dispatch is disabled in settings.' };
+    } else if (!isSmtpConfigured) {
+      return {
+        success: false,
+        ran: false,
+        message: 'SMTP credentials (Google App Password) not configured in Firestore or env.',
+      };
+    } else if (istTime >= targetTime && lastDispatchedDate !== istDate) {
+      // Current IST time is at or after scheduled time (e.g. 23:30), and report hasn't been sent for today
+      shouldRun = true;
+      targetReportDate = istDate;
+      reason = `Scheduled time ${targetTime} IST reached or passed (current time: ${istTime} IST) for ${istDate}`;
+    } else if (istTime < targetTime && (!lastDispatchedDate || lastDispatchedDate < yesterdayIstDate)) {
+      // Current IST time is before scheduled time (e.g. morning), BUT yesterday's report was NEVER sent because container was asleep at 23:30
+      shouldRun = true;
+      targetReportDate = yesterdayIstDate;
+      reason = `Missed scheduled run for yesterday (${yesterdayIstDate}) because server was inactive at ${targetTime} IST. Catching up now!`;
+    }
+
+    if (!shouldRun) {
+      return {
+        success: true,
+        ran: false,
+        message: `No dispatch needed. Last dispatched: ${lastDispatchedDate || 'none'}. Next scheduled run: ${istDate} at ${targetTime} IST (Current: ${istTime} IST).`,
+        currentIstTime: `${istDate} ${istTime}`,
+        lastDispatchedDate,
+      };
+    }
+
+    console.log(`🚀 [SCHEDULER TRIGGER] Running daily report dispatch: ${reason}`);
+
+    isReportRunning = true;
+    try {
+      let invoicesToUse: Invoice[] = [];
+      if (Array.isArray(options?.clientInvoices) && options.clientInvoices.length > 0) {
+        invoicesToUse = options.clientInvoices;
+      } else {
+        invoicesToUse = await fetchLiveInvoicesFromFirestore();
+      }
+
+      const result = await sendDailyInvoicesEmail(invoicesToUse, recipientEmail, targetReportDate);
+
+      if (result.success) {
+        if (!appData.reportConfig) {
+          appData.reportConfig = {
+            recipientEmail,
+            scheduleTime: targetTime,
+            enabled: true,
+          };
+        }
+        appData.reportConfig.lastDispatchedDate = targetReportDate;
+        appData.reportConfig.lastDispatchedTimestamp = new Date().toISOString();
+        saveData(appData);
+
+        await saveSystemConfigToFirestore({
+          lastDispatchedDate: targetReportDate,
+          lastDispatchedTimestamp: new Date().toISOString(),
+          lastDispatch: lastReportDispatch,
+        });
+
+        console.log(`✅ [SCHEDULER SUCCESS] Report dispatched for ${targetReportDate} to ${recipientEmail}`);
+      }
+
+      return {
+        ...result,
+        ran: true,
+        reason,
+        targetReportDate,
+      };
+    } catch (err: any) {
+      console.error('Error during scheduled report dispatch:', err);
+      return { success: false, ran: true, message: err.message || 'Dispatch failed.' };
+    } finally {
+      isReportRunning = false;
+    }
+  }
+
+  // POST Check and Run Scheduled Report (Client ping & Catch-up)
+  app.post('/api/reports/check-and-dispatch', async (req, res) => {
+    try {
+      const force = Boolean(req.body?.force);
+      const source = req.body?.source || 'client_ping';
+      const clientInvoices = Array.isArray(req.body?.invoices) ? req.body.invoices : undefined;
+      const result = await checkAndRunScheduledReport({ force, source, clientInvoices });
+      return res.json({
+        ...result,
+        lastDispatch: lastReportDispatch,
+      });
+    } catch (err: any) {
+      console.error('API check-and-dispatch error:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Dispatch check failed.' });
+    }
+  });
 
   // POST Trigger Daily Excel Email dispatch (with optional invoices payload from client)
   app.post('/api/reports/daily-excel-email', async (req, res) => {
@@ -1347,9 +1632,32 @@ async function startServer() {
       const payloadInvoices: Invoice[] =
         Array.isArray(req.body?.invoices) && req.body.invoices.length > 0
           ? req.body.invoices
-          : appData.invoices;
-      const recipient = req.body?.recipient || 'snreddy.it@gmail.com';
-      const result = await sendDailyInvoicesEmail(payloadInvoices, recipient);
+          : await fetchLiveInvoicesFromFirestore();
+      const recipient = req.body?.recipient || appData.reportConfig?.recipientEmail || 'snreddy.it@gmail.com';
+      const targetDate = req.body?.targetDate;
+      const result = await sendDailyInvoicesEmail(payloadInvoices, recipient, targetDate);
+
+      if (result.success) {
+        const now = new Date();
+        const istDate = targetDate || now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        if (!appData.reportConfig) {
+          appData.reportConfig = {
+            recipientEmail: recipient,
+            scheduleTime: '23:30',
+            enabled: true,
+          };
+        }
+        appData.reportConfig.lastDispatchedDate = istDate;
+        appData.reportConfig.lastDispatchedTimestamp = now.toISOString();
+        saveData(appData);
+
+        await saveSystemConfigToFirestore({
+          lastDispatchedDate: istDate,
+          lastDispatchedTimestamp: now.toISOString(),
+          lastDispatch: lastReportDispatch,
+        });
+      }
+
       return res.json({
         ...result,
         lastDispatch: lastReportDispatch,
@@ -1362,8 +1670,8 @@ async function startServer() {
     }
   });
 
-  // POST Save SMTP Config (Gmail App Password)
-  app.post('/api/reports/smtp-config', (req, res) => {
+  // POST Save SMTP Config (Gmail App Password - with Live Verification & Firestore Persistence)
+  app.post('/api/reports/smtp-config', async (req, res) => {
     try {
       const { user, pass, host, port } = req.body || {};
       if (!user || !pass) {
@@ -1372,22 +1680,99 @@ async function startServer() {
           message: 'Both Gmail address and Google App Password (16 characters) are required.',
         });
       }
+      const cleanUser = String(user).trim();
+      const cleanPass = String(pass).replace(/\s+/g, '').trim();
+      const cleanHost = host ? String(host).trim() : 'smtp.gmail.com';
+      const cleanPort = port ? Number(port) : 465;
+
+      // Verify connection with nodemailer
+      try {
+        const testTransporter = nodemailer.createTransport({
+          host: cleanHost,
+          port: cleanPort,
+          secure: cleanPort === 465,
+          auth: {
+            user: cleanUser,
+            pass: cleanPass,
+          },
+        });
+        await testTransporter.verify();
+      } catch (verifyErr: any) {
+        console.error('SMTP Verification Failed:', verifyErr.message);
+        return res.status(400).json({
+          success: false,
+          message: `Gmail SMTP verification failed: ${verifyErr.message}. Please check your 16-character Google App Password (generated at myaccount.google.com/apppasswords).`,
+        });
+      }
+
       appData.smtpConfig = {
-        user: String(user).trim(),
-        pass: String(pass).replace(/\s+/g, '').trim(),
-        host: host ? String(host).trim() : 'smtp.gmail.com',
-        port: port ? Number(port) : 465,
+        user: cleanUser,
+        pass: cleanPass,
+        host: cleanHost,
+        port: cleanPort,
       };
       saveData(appData);
+
+      // Persist in Firestore permanently
+      await saveSystemConfigToFirestore({
+        smtpUser: cleanUser,
+        smtpPass: cleanPass,
+        smtpHost: cleanHost,
+        smtpPort: cleanPort,
+      });
+
+      console.log(`✅ [SMTP SAVED] Gmail credentials saved and verified for ${cleanUser} in Firestore`);
+
+      // Immediately run catch-up if yesterday's report was pending credentials
+      checkAndRunScheduledReport({ source: 'credentials_just_saved' }).catch((e) =>
+        console.error('Post-save catch-up error:', e)
+      );
+
       return res.json({
         success: true,
-        message: `Gmail delivery configured for ${appData.smtpConfig.user}! You can now test sending or wait for automated midnight reports.`,
-        smtpUser: appData.smtpConfig.user,
+        message: `Gmail SMTP verified & saved permanently in Cloud Database for ${cleanUser}! Daily automatic reports will now deliver seamlessly.`,
+        smtpUser: cleanUser,
       });
     } catch (err: any) {
+      console.error('Error saving SMTP config:', err);
       return res
         .status(500)
         .json({ success: false, message: err.message || 'Failed to save SMTP config.' });
+    }
+  });
+
+  // POST Test SMTP Connection without sending email
+  app.post('/api/reports/test-smtp', async (req, res) => {
+    try {
+      const user = req.body?.user || appData.smtpConfig?.user || process.env.SMTP_USER;
+      const pass = req.body?.pass ? String(req.body.pass).replace(/\s+/g, '').trim() : appData.smtpConfig?.pass || process.env.SMTP_PASS;
+      const host = req.body?.host || appData.smtpConfig?.host || process.env.SMTP_HOST || 'smtp.gmail.com';
+      const port = Number(req.body?.port || appData.smtpConfig?.port || process.env.SMTP_PORT) || 465;
+
+      if (!user || !pass) {
+        return res.status(400).json({
+          success: false,
+          message: 'No SMTP credentials found to test. Please enter your Gmail address and 16-character App Password.',
+        });
+      }
+
+      const testTransporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass },
+      });
+      await testTransporter.verify();
+
+      return res.json({
+        success: true,
+        message: `Connection successful! smtp.gmail.com authenticated ${user} without errors.`,
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        message: `SMTP connection test failed: ${err.message}`,
+      });
     }
   });
 
@@ -1397,7 +1782,7 @@ async function startServer() {
       const payloadInvoices: Invoice[] =
         Array.isArray(req.body?.invoices) && req.body.invoices.length > 0
           ? req.body.invoices
-          : appData.invoices;
+          : await fetchLiveInvoicesFromFirestore();
       const buf = generateInvoicesExcelBuffer(payloadInvoices);
       const dateStr = new Date().toISOString().slice(0, 10);
       const filename = `VIJAYA_AGENCIES_Daily_Invoices_${dateStr}.xlsx`;
@@ -1414,7 +1799,11 @@ async function startServer() {
   });
 
   // GET Email Schedule & Status
-  app.get('/api/reports/email-status', (req, res) => {
+  app.get('/api/reports/email-status', async (req, res) => {
+    if (!appData.smtpConfig) {
+      await loadSystemConfigFromFirestore();
+    }
+
     const isSmtpConfigured = !!(
       (appData.smtpConfig?.user && appData.smtpConfig?.pass) ||
       (process.env.SMTP_USER && process.env.SMTP_PASS)
@@ -1428,12 +1817,35 @@ async function startServer() {
     });
     const istDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
+    const yesterdayMs = now.getTime() - 24 * 60 * 60 * 1000;
+    const yesterdayIstDate = new Date(yesterdayMs).toLocaleDateString('en-CA', {
+      timeZone: 'Asia/Kolkata',
+    });
+
     const targetTime = appData.reportConfig?.scheduleTime || '23:30';
     const targetEmail =
       appData.reportConfig?.recipientEmail ||
       process.env.DAILY_REPORT_EMAIL ||
       'snreddy.it@gmail.com';
     const enabled = appData.reportConfig?.enabled !== false;
+    const lastDispatchedDate = appData.reportConfig?.lastDispatchedDate || '';
+
+    // Determine overdue status
+    let isOverdue = false;
+    let overdueReason = '';
+    let overdueDate = '';
+
+    if (enabled && isSmtpConfigured) {
+      if (istTime >= targetTime && lastDispatchedDate !== istDate) {
+        isOverdue = true;
+        overdueDate = istDate;
+        overdueReason = `Today's scheduled report (${istDate} at ${targetTime} IST) has reached and is due for delivery.`;
+      } else if (istTime < targetTime && (!lastDispatchedDate || lastDispatchedDate < yesterdayIstDate)) {
+        isOverdue = true;
+        overdueDate = yesterdayIstDate;
+        overdueReason = `Yesterday's report (${yesterdayIstDate} at ${targetTime} IST) was missed while the server was asleep.`;
+      }
+    }
 
     res.json({
       scheduleTime: targetTime,
@@ -1442,14 +1854,23 @@ async function startServer() {
       isSmtpConfigured,
       smtpHost: appData.smtpConfig?.host || process.env.SMTP_HOST || 'smtp.gmail.com',
       smtpUser: activeSmtpUser ? `${activeSmtpUser.slice(0, 3)}***` : null,
+      fullSmtpUser: activeSmtpUser || null,
       currentTimeIst: `${istDate} ${istTime}`,
+      currentIstDate: istDate,
+      currentIstTime: istTime,
+      yesterdayIstDate,
+      lastDispatchedDate,
+      lastDispatchedTimestamp: appData.reportConfig?.lastDispatchedTimestamp || null,
       lastDispatch: lastReportDispatch,
+      isOverdue,
+      overdueReason,
+      overdueDate,
       isSheetsConnected: !!(appData.sheetsConfig?.isConnected && appData.sheetsConfig?.appsScriptUrl),
     });
   });
 
   // POST Update Email & Schedule Settings
-  app.post('/api/reports/config', (req, res) => {
+  app.post('/api/reports/config', async (req, res) => {
     try {
       const { recipientEmail, scheduleTime, enabled } = req.body || {};
       if (!appData.reportConfig) {
@@ -1469,6 +1890,14 @@ async function startServer() {
         appData.reportConfig.enabled = enabled;
       }
       saveData(appData);
+
+      // Persist in Firestore
+      await saveSystemConfigToFirestore({
+        recipientEmail: appData.reportConfig.recipientEmail,
+        scheduleTime: appData.reportConfig.scheduleTime,
+        enabled: appData.reportConfig.enabled,
+      });
+
       return res.json({
         success: true,
         message: `Email settings updated: Sending daily at ${appData.reportConfig.scheduleTime} IST to ${appData.reportConfig.recipientEmail}`,
@@ -1554,7 +1983,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', async () => {
     console.log(`VIJAYA AGENCIES Server running on http://localhost:${PORT}`);
     if (appData.sheetsConfig.appsScriptUrl) {
       syncFromGoogleSheets(appData.sheetsConfig.appsScriptUrl)
@@ -1562,41 +1991,39 @@ async function startServer() {
         .catch((e) => console.error('Initial sync error:', e));
     }
 
-    // Automated Daily Invoice Email Runner (Dynamic Schedule & Recipient)
-    const initialTime = appData.reportConfig?.scheduleTime || '23:30';
-    const initialEmail =
+    // Load persistent email & SMTP configuration from Firestore
+    try {
+      await loadSystemConfigFromFirestore();
+    } catch (e) {
+      console.warn('Startup Firestore config load warning:', e);
+    }
+
+    const scheduledTime = appData.reportConfig?.scheduleTime || '23:30';
+    const recipientEmail =
       appData.reportConfig?.recipientEmail ||
       process.env.DAILY_REPORT_EMAIL ||
       'snreddy.it@gmail.com';
+    const now = new Date();
+    const istTime = now.toLocaleTimeString('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const istDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
     console.log(
-      `⏰ [SCHEDULER INITIALIZED] Daily Invoices Excel Email scheduled for ${initialTime} IST to ${initialEmail}`
+      `⏰ [SCHEDULER INITIALIZED] Current IST: ${istDate} ${istTime}. Daily report scheduled for ${scheduledTime} IST to ${recipientEmail}`
     );
+
+    // Run check on startup in case the container just woke up and missed an overdue report
+    checkAndRunScheduledReport({ source: 'server_startup' })
+      .then((res) => console.log('🏁 [STARTUP REPORT CHECK RESULT]:', res.message))
+      .catch((e) => console.error('Startup report check error:', e));
+
+    // Periodic 60-second scheduler check
     setInterval(async () => {
       try {
-        const targetTime = appData.reportConfig?.scheduleTime || '23:30';
-        const targetEmail =
-          appData.reportConfig?.recipientEmail ||
-          process.env.DAILY_REPORT_EMAIL ||
-          'snreddy.it@gmail.com';
-        const isEnabled = appData.reportConfig?.enabled !== false;
-
-        if (!isEnabled) return;
-
-        const now = new Date();
-        const istTime = now.toLocaleTimeString('en-GB', {
-          timeZone: 'Asia/Kolkata',
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-        const istDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-
-        if (istTime === targetTime && lastMidnightCronDate !== istDate) {
-          lastMidnightCronDate = istDate;
-          console.log(
-            `⏰ [SCHEDULED RUNNER] Scheduled time ${targetTime} IST reached for ${istDate}. Generating daily Excel backup email for ${targetEmail}...`
-          );
-          await sendDailyInvoicesEmail(appData.invoices, targetEmail);
-        }
+        await checkAndRunScheduledReport({ source: 'interval_ticker' });
       } catch (cronErr) {
         console.error('Midnight scheduler tick error:', cronErr);
       }
