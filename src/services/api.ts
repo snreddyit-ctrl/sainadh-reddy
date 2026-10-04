@@ -102,6 +102,19 @@ export const api = {
     }
   },
 
+  async deleteAllInvoices(options?: { deletePayments?: boolean }): Promise<ApiResponse<{ deletedCount: number; deletedPaymentsCount: number }>> {
+    try {
+      const res = await fetch('/api/invoices/delete-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...noCacheHeaders },
+        body: JSON.stringify(options || {}),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to delete all invoices' };
+    }
+  },
+
   async getRoots(): Promise<string[]> {
     try {
       const res = await fetch(`/api/roots?_t=${Date.now()}`, {

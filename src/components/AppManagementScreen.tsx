@@ -15,6 +15,8 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   Building2,
+  AlertOctagon,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth, MASTER_ADMIN_EMAIL } from '../context/AuthContext';
 import { Invoice } from '../types';
@@ -31,6 +33,7 @@ interface AppManagementScreenProps {
   onOpenApprovalsModal: () => void;
   onOpenDownloadModal: (root?: string) => void;
   onOpenBulkDeletePaid?: () => void;
+  onOpenDeleteAllInvoices?: () => void;
 }
 
 export const AppManagementScreen: React.FC<AppManagementScreenProps> = ({
@@ -45,6 +48,7 @@ export const AppManagementScreen: React.FC<AppManagementScreenProps> = ({
   onOpenApprovalsModal,
   onOpenDownloadModal,
   onOpenBulkDeletePaid,
+  onOpenDeleteAllInvoices,
 }) => {
   const { currentUser, userProfile, logout } = useAuth();
   const isAdmin =
@@ -128,7 +132,7 @@ export const AppManagementScreen: React.FC<AppManagementScreenProps> = ({
             </div>
           </div>
 
-          <div className="pt-1">
+          <div className="space-y-2 pt-1">
             <button
               type="button"
               onClick={onOpenFirebaseModal}
@@ -140,6 +144,21 @@ export const AppManagementScreen: React.FC<AppManagementScreenProps> = ({
               </div>
               <ChevronRight className="w-4 h-4 text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
             </button>
+
+            {onOpenDeleteAllInvoices && (
+              <button
+                type="button"
+                onClick={onOpenDeleteAllInvoices}
+                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100/80 text-rose-800 border border-rose-200 font-bold text-xs transition-all cursor-pointer shadow-2xs group"
+                title="Open option to delete all invoices from database"
+              >
+                <div className="flex items-center space-x-2">
+                  <Trash2 className="w-4 h-4 text-rose-600" />
+                  <span>Delete All Invoices From Database ({totalInvoices})</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-rose-600 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -302,31 +321,42 @@ export const AppManagementScreen: React.FC<AppManagementScreenProps> = ({
           </div>
         </div>
 
-        {/* Module 5: Bulk Database Clean-up */}
-        {onOpenBulkDeletePaid && (
-          <div className="bg-white/95 backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-rose-100 border border-rose-200 text-rose-700 flex items-center justify-center shrink-0">
-                    <Trash2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">Settled Bills Maintenance</h3>
-                    <p className="text-[11px] text-slate-500">Bulk delete paid invoices by date range</p>
-                  </div>
+        {/* Module 5: Database Clean-up & Maintenance */}
+        <div className="bg-white/95 backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-100 border border-rose-200 text-rose-700 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
                 </div>
-                <span className="text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full">
-                  {paidInvoices} Settled
-                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Database Clean-up & Maintenance</h3>
+                  <p className="text-[11px] text-slate-500">Purge settled records or delete all invoices</p>
+                </div>
               </div>
-
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Purge settled bills to keep Firestore clean and performant. Automatically verifies that no outstanding balance exists before deletion.
-              </p>
+              <span className="text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full">
+                {totalInvoices} Invoices
+              </span>
             </div>
 
-            <div className="pt-1">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Maintain database health by purging settled invoices with zero balance, or perform a complete wipe of all invoice records from the database.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-center">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400">Total in DB</p>
+                <p className="text-sm font-black text-slate-800">{totalInvoices}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400">Settled (Paid)</p>
+                <p className="text-sm font-black text-emerald-600">{paidInvoices}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-1">
+            {onOpenBulkDeletePaid && (
               <button
                 type="button"
                 onClick={onOpenBulkDeletePaid}
@@ -334,13 +364,28 @@ export const AppManagementScreen: React.FC<AppManagementScreenProps> = ({
               >
                 <div className="flex items-center space-x-2">
                   <Trash2 className="w-4 h-4 text-rose-600" />
-                  <span>Bulk Delete Paid Invoices</span>
+                  <span>Bulk Delete Paid Invoices ({paidInvoices})</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-rose-600 group-hover:translate-x-0.5 transition-transform" />
               </button>
-            </div>
+            )}
+
+            {onOpenDeleteAllInvoices && (
+              <button
+                type="button"
+                onClick={onOpenDeleteAllInvoices}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-all cursor-pointer shadow-sm group"
+                title="Option to delete all invoices from database"
+              >
+                <div className="flex items-center space-x-2">
+                  <AlertOctagon className="w-4 h-4 text-white" />
+                  <span>Delete All Invoices From Database</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-white/80 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Module 6: Session & Security Policy */}
         <div className="bg-white/95 backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
@@ -391,6 +436,39 @@ export const AppManagementScreen: React.FC<AppManagementScreenProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Dedicated Danger Zone Card: Delete All Invoices From Database */}
+      {onOpenDeleteAllInvoices && (
+        <div className="bg-red-50/80 border border-red-200/90 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start space-x-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-red-100 border border-red-300 text-red-700 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-black text-red-950">
+                  Danger Zone: Delete All Invoices from Database
+                </h3>
+                <span className="text-[10px] font-bold bg-red-200 text-red-900 px-2 py-0.5 rounded-full">
+                  Admin Action
+                </span>
+              </div>
+              <p className="text-xs text-red-800/90 mt-1 max-w-2xl leading-relaxed">
+                Need to start fresh? This option completely wipes all <strong>{totalInvoices} invoice records</strong> from Google Cloud Firestore and server records with safe dual confirmation.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenDeleteAllInvoices}
+            className="inline-flex items-center justify-center space-x-2 px-5 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs shadow-md shadow-red-600/20 transition-all cursor-pointer shrink-0 active:scale-98"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Delete All Invoices Option</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

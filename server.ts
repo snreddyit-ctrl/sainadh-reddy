@@ -826,7 +826,7 @@ async function startServer() {
       const invoiceIndex = appData.invoices.findIndex((inv) => inv.billNo === cleanBillNo);
       
       if (invoiceIndex === -1) {
-        return res.status(404).json({ success: false, message: 'Invoice not found.' });
+        return res.json({ success: true, message: 'Invoice was already removed from server cache.' });
       }
 
       const deleted = appData.invoices.splice(invoiceIndex, 1)[0];
@@ -890,6 +890,37 @@ async function startServer() {
     } catch (err: any) {
       console.error('Bulk delete error:', err);
       return res.status(500).json({ success: false, message: err.message || 'Failed to bulk delete invoices.' });
+    }
+  });
+
+  // POST Delete All Invoices
+  app.post('/api/invoices/delete-all', async (req, res) => {
+    try {
+      const { deletePayments } = req.body || {};
+      const totalInvoices = appData.invoices.length;
+      const totalPayments = appData.payments.length;
+
+      appData.invoices = [];
+      if (deletePayments) {
+        appData.payments = [];
+      }
+      saveData(appData);
+
+      if (appData.sheetsConfig.appsScriptUrl) {
+        forwardToGoogleSheets({
+          action: 'deleteAllInvoices',
+        }).catch((e) => console.error('Background sheets delete-all failed:', e));
+      }
+
+      return res.json({
+        success: true,
+        message: `Successfully deleted all ${totalInvoices} invoice${totalInvoices === 1 ? '' : 's'} from database.`,
+        deletedCount: totalInvoices,
+        deletedPaymentsCount: deletePayments ? totalPayments : 0,
+      });
+    } catch (err: any) {
+      console.error('Delete all invoices error:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Failed to delete all invoices.' });
     }
   });
 
@@ -1229,6 +1260,10 @@ async function startServer() {
           console.log(`📋 [INVOICES] Loaded ${fetched.length} live invoices from Firestore for daily report`);
           return fetched;
         }
+      } else {
+        appData.invoices = [];
+        saveData(appData);
+        return [];
       }
     } catch (err: any) {
       console.error('Error fetching live invoices from Firestore:', err.message);

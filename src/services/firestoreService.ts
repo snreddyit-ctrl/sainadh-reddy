@@ -652,12 +652,19 @@ export const firestoreService = {
       const q = query(collection(db, INVOICES_COL), where('billNo', '==', cleanBillNo));
       const snap = await getDocs(q);
 
-      if (snap.empty) {
+      let docsToDelete = snap.docs;
+      if (docsToDelete.length === 0 && !isNaN(Number(cleanBillNo))) {
+        const qNum = query(collection(db, INVOICES_COL), where('billNo', '==', Number(cleanBillNo)));
+        const snapNum = await getDocs(qNum);
+        docsToDelete = snapNum.docs;
+      }
+
+      if (docsToDelete.length === 0) {
         return { success: false, message: `Invoice #${cleanBillNo} not found.` };
       }
 
       const batch = writeBatch(db);
-      snap.forEach((d) => batch.delete(d.ref));
+      docsToDelete.forEach((d) => batch.delete(d.ref));
       await batch.commit();
 
       return { success: true };
@@ -673,11 +680,17 @@ export const firestoreService = {
       let totalDeleted = 0;
       const batch = writeBatch(db);
 
-      // Process in chunks if large, but typical bulk delete is 1-50
       for (const billNo of billNos) {
-        const q = query(collection(db, INVOICES_COL), where('billNo', '==', String(billNo).trim()));
+        const cleanNo = String(billNo).trim();
+        const q = query(collection(db, INVOICES_COL), where('billNo', '==', cleanNo));
         const snap = await getDocs(q);
-        snap.forEach((d) => {
+        let docsToDelete = snap.docs;
+        if (docsToDelete.length === 0 && !isNaN(Number(cleanNo))) {
+          const qNum = query(collection(db, INVOICES_COL), where('billNo', '==', Number(cleanNo)));
+          const snapNum = await getDocs(qNum);
+          docsToDelete = snapNum.docs;
+        }
+        docsToDelete.forEach((d) => {
           batch.delete(d.ref);
           totalDeleted++;
         });
@@ -688,6 +701,73 @@ export const firestoreService = {
     } catch (err: any) {
       console.error('Firestore bulkDelete error:', err);
       return { success: false, count: 0, message: err.message || 'Failed to bulk delete.' };
+    }
+  },
+
+  async deleteAllInvoices(options?: { deletePayments?: boolean }): Promise<{
+    success: boolean;
+    count: number;
+    paymentsCount?: number;
+    message?: string;
+  }> {
+    try {
+      const snap = await getDocs(collection(db, INVOICES_COL));
+      const totalDocs = snap.docs.length;
+      if (totalDocs === 0) {
+        let deletedPaymentsCount = 0;
+        if (options?.deletePayments) {
+          const paySnap = await getDocs(collection(db, PAYMENTS_COL));
+          deletedPaymentsCount = paySnap.docs.length;
+          const batchSize = 400;
+          for (let i = 0; i < paySnap.docs.length; i += batchSize) {
+            const batch = writeBatch(db);
+            const chunk = paySnap.docs.slice(i, i + batchSize);
+            chunk.forEach((d) => batch.delete(d.ref));
+            await batch.commit();
+          }
+        }
+        return {
+          success: true,
+          count: 0,
+          paymentsCount: deletedPaymentsCount,
+          message: 'No invoices were found in database.',
+        };
+      }
+
+      // Firestore batches can handle up to 500 writes
+      const batchSize = 400;
+      for (let i = 0; i < snap.docs.length; i += batchSize) {
+        const batch = writeBatch(db);
+        const chunk = snap.docs.slice(i, i + batchSize);
+        chunk.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+
+      let deletedPaymentsCount = 0;
+      if (options?.deletePayments) {
+        const paySnap = await getDocs(collection(db, PAYMENTS_COL));
+        deletedPaymentsCount = paySnap.docs.length;
+        for (let i = 0; i < paySnap.docs.length; i += batchSize) {
+          const batch = writeBatch(db);
+          const chunk = paySnap.docs.slice(i, i + batchSize);
+          chunk.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      }
+
+      return {
+        success: true,
+        count: totalDocs,
+        paymentsCount: deletedPaymentsCount,
+        message: `Successfully deleted all ${totalDocs} invoice(s) from Firebase Cloud Firestore.`,
+      };
+    } catch (err: any) {
+      console.error('Firestore deleteAllInvoices error:', err);
+      return {
+        success: false,
+        count: 0,
+        message: err.message || 'Failed to delete all invoices from Firebase.',
+      };
     }
   },
 

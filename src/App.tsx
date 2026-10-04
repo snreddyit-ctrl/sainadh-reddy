@@ -19,6 +19,8 @@ import { UserApprovalsModal } from './components/UserApprovalsModal';
 import { AuthScreen } from './components/AuthScreen';
 import { InactivityHandler } from './components/InactivityHandler';
 import { AppManagementScreen } from './components/AppManagementScreen';
+import { DeleteAllInvoicesModal } from './components/DeleteAllInvoicesModal';
+import { BulkDeletePaidModal } from './components/BulkDeletePaidModal';
 import dashboardForestBg from './assets/images/dashboard_forest_bg.jpg';
 import { AuthProvider, useAuth, MASTER_ADMIN_EMAIL } from './context/AuthContext';
 import { firestoreService, DEFAULT_ROOTS } from './services/firestoreService';
@@ -52,6 +54,8 @@ function MainApp() {
   const [downloadModalRoot, setDownloadModalRoot] = useState<string>('All');
   const [isExportCenterOpen, setIsExportCenterOpen] = useState(false);
   const [isApprovalsModalOpen, setIsApprovalsModalOpen] = useState(false);
+  const [isDeleteAllInvoicesModalOpen, setIsDeleteAllInvoicesModalOpen] = useState(false);
+  const [isBulkDeletePaidModalOpen, setIsBulkDeletePaidModalOpen] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
   const isAdmin = userProfile?.role === 'admin' || (currentUser?.email || '').toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
@@ -66,28 +70,10 @@ function MainApp() {
         firestoreService.getRoots(),
       ]);
 
-      // If Firestore is empty on initial migration, seed existing invoices and roots
-      if (firestoreInvoices.length === 0) {
-        try {
-          const localFallback = await api.getInvoices();
-          const localRoots = await api.getRoots();
-          if (localFallback.invoices && localFallback.invoices.length > 0) {
-            await firestoreService.syncInitialDataIfEmpty(localFallback.invoices, localRoots);
-            const reloadedInvoices = await firestoreService.getInvoices();
-            const reloadedRoots = await firestoreService.getRoots();
-            setInvoices(reloadedInvoices);
-            setRoots(reloadedRoots.length > 0 ? reloadedRoots : DEFAULT_ROOTS);
-            return;
-          }
-        } catch (seedErr) {
-          console.warn('Initial seeding fallback warning:', seedErr);
-        }
-      }
-
       setInvoices(firestoreInvoices);
       // Ensure all roots from invoices are registered into Firestore roots collection
       const syncedRoots = await firestoreService.syncInvoiceRootsToCollection(firestoreInvoices);
-      setRoots(syncedRoots.length > 0 ? syncedRoots : firestoreRoots);
+      setRoots(syncedRoots.length > 0 ? syncedRoots : (firestoreRoots.length > 0 ? firestoreRoots : DEFAULT_ROOTS));
     } catch (err) {
       console.error('Error fetching Firestore data:', err);
     } finally {
@@ -103,9 +89,7 @@ function MainApp() {
 
     // Subscribe to live invoice updates in Firestore
     const unsubscribe = firestoreService.subscribeInvoices((liveInvoices) => {
-      if (liveInvoices.length > 0 || invoices.length > 0) {
-        setInvoices(liveInvoices);
-      }
+      setInvoices(liveInvoices);
     });
 
     // Subscribe to live roots updates in Firestore
@@ -235,12 +219,14 @@ function MainApp() {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      const res = await firestoreService.deleteInvoice(deleteTarget.billNo);
+      const [res] = await Promise.all([
+        firestoreService.deleteInvoice(deleteTarget.billNo),
+        api.deleteInvoice(deleteTarget.billNo).catch((e) => console.warn('Server deleteInvoice sync:', e)),
+      ]);
       if (res.success) {
         setInvoices((prev) => prev.filter((inv) => inv.billNo !== deleteTarget.billNo));
         setSelectedInvoice(null);
         setDeleteTarget(null);
-        await fetchFirestoreData(false);
       } else {
         alert(res.message || 'Failed to delete invoice from Firebase');
       }
@@ -258,19 +244,43 @@ function MainApp() {
   ): Promise<{ success: boolean; count: number; message?: string }> => {
     if (!billNumbers.length) return { success: true, count: 0 };
     try {
-      const res = await firestoreService.bulkDeleteInvoices(billNumbers);
+      const [res] = await Promise.all([
+        firestoreService.bulkDeleteInvoices(billNumbers),
+        api.bulkDeleteInvoices(billNumbers).catch((e) => console.warn('Server bulkDeleteInvoices sync:', e)),
+      ]);
       if (res.success) {
         setInvoices((prev) => prev.filter((inv) => !billNumbers.includes(inv.billNo)));
         if (selectedInvoice && billNumbers.includes(selectedInvoice.billNo)) {
           setSelectedInvoice(null);
         }
-        await fetchFirestoreData(false);
         return { success: true, count: res.count };
       }
       return { success: false, count: 0, message: res.message || 'Failed to delete paid bills' };
     } catch (err: any) {
       console.error('Failed to bulk delete invoices:', err);
       return { success: false, count: 0, message: err.message || 'Failed to bulk delete invoices' };
+    }
+  };
+
+  // Delete all invoices from database
+  const handleDeleteAllInvoices = async (options: {
+    deletePayments: boolean;
+  }): Promise<{ success: boolean; count: number; paymentsCount?: number; message?: string }> => {
+    try {
+      const [firestoreRes] = await Promise.all([
+        firestoreService.deleteAllInvoices(options),
+        api.deleteAllInvoices(options).catch((e) => console.warn('Server deleteAllInvoices sync:', e)),
+      ]);
+
+      if (firestoreRes.success) {
+        setInvoices([]);
+        setSelectedInvoice(null);
+        return firestoreRes;
+      }
+      return { success: false, count: 0, message: firestoreRes.message || 'Failed to delete all invoices' };
+    } catch (err: any) {
+      console.error('Failed to delete all invoices:', err);
+      return { success: false, count: 0, message: err.message || 'Error occurred while purging database' };
     }
   };
 
@@ -615,7 +625,10 @@ function MainApp() {
                     setIsDownloadModalOpen(true);
                   }}
                   onOpenBulkDeletePaid={() => {
-                    setActiveScreen('all_bills');
+                    setIsBulkDeletePaidModalOpen(true);
+                  }}
+                  onOpenDeleteAllInvoices={() => {
+                    setIsDeleteAllInvoicesModalOpen(true);
                   }}
                 />
               )}
@@ -710,6 +723,23 @@ function MainApp() {
           const list = await firestoreService.getPendingApprovals();
           setPendingApprovalsCount(list.length);
         }}
+      />
+
+      {/* Delete All Invoices From Database Confirmation Modal */}
+      <DeleteAllInvoicesModal
+        isOpen={isDeleteAllInvoicesModalOpen}
+        onClose={() => setIsDeleteAllInvoicesModalOpen(false)}
+        invoices={invoices}
+        onConfirmDeleteAll={handleDeleteAllInvoices}
+      />
+
+      {/* Bulk Delete Settled Paid Bills Modal */}
+      <BulkDeletePaidModal
+        isOpen={isBulkDeletePaidModalOpen}
+        onClose={() => setIsBulkDeletePaidModalOpen(false)}
+        invoices={invoices}
+        roots={roots}
+        onConfirmBulkDelete={handleBulkDeleteInvoices}
       />
     </div>
   );
